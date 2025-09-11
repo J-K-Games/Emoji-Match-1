@@ -340,6 +340,17 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 
 
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
+<script>/* injected cfg */
+const firebaseConfig = {
+  "apiKey": "AIzaSyBa-8wKtWpiFVFeUrNJedjYsuIQLbI0JLQ",
+  "authDomain": "j-k--games.firebaseapp.com",
+  "projectId": "j-k--games",
+  "storageBucket": "j-k--games.firebasestorage.app",
+  "messagingSenderId": "779886305498",
+  "appId": "1:779886305498:web:d8e0f24b214805904285e3",
+  "measurementId": "G-YE25QXV7PV"
+};
+</script>
 </head>
 <body class="high">
 <div id="app">
@@ -639,15 +650,7 @@ const FB_APP_VER = "10.12.4";
     const { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, limit, getDocs, onSnapshot, where, runTransaction, serverTimestamp } =
       await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-firestore.js`);
     const { getAuth, signInAnonymously } = await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-auth.js`);
-    const app = initializeApp({
-      apiKey: "AIzaSyBa-8wKtWpiFVFeUrNJedjYsuIQLbI0JLQ",
-      authDomain: "j-k--games.firebaseapp.com",
-      projectId: "j-k--games",
-      storageBucket: "j-k--games.firebasestorage.app",
-      messagingSenderId: "779886305498",
-      appId: "1:779886305498:web:d8e0f24b214805904285e3",
-      measurementId: "G-YE25QXV7PV"
-    });
+    const app = initializeApp(firebaseConfig);
     
 const auth = getAuth(app);
 window.auth = getAuth(app);
