@@ -161,6 +161,19 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 }
 
 /* --- OFFICIAL v11: Konto scroll fix --- */
+
+/* --- OFFICIAL v12: Konto deep scroll & bottom-safe padding --- */
+:root{ --safe-bottom: env(safe-area-inset-bottom, 0px); }
+.modal-body { 
+  max-height: calc(100dvh - 96px) !important; 
+  overflow-y: auto !important; 
+  -webkit-overflow-scrolling: touch !important; 
+  overscroll-behavior: contain !important;
+}
+.modal-body[data-scrollable]{
+  padding-bottom: calc(200px + var(--safe-bottom)) !important; /* make space for last buttons */
+}
+
 .modal-body[data-scrollable],
 #dlgAccount .modal-body,
 #accountPanel .modal-body,
@@ -1030,7 +1043,7 @@ document.getElementById('btnPlayYT').onclick = ()=>{
   const url=$("#ytUrl").value.trim(); if(!url){ alert("Bitte YouTube-Link einfügen."); return; }
   const id = (url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/)||[])[1];
   if(!id){ alert("Link nicht erkannt."); return; }
-  const wrap=document.getElementById('ytWrap'); wrap.innerHTML=`<iframe id="ytp" title="YouTube Player" width="1" height="1" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;opacity:0;pointer-events:none" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe>`;
+  const wrap=document.getElementById('ytWrap'); wrap.innerHTML=`<div id="ytp-holder" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;opacity:0;pointer-events:none"><div id="ytp"></div></div></iframe>`;
 };
 
 function renderTrophies(){
@@ -1916,14 +1929,62 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 </script>
 <script>
-// --- OFFICIAL v11: YouTube music playback ---
+</script>
+<script>
+// --- OFFICIAL v13: YouTube mobile playback (YT Iframe API) ---
 (function(){
+  var player, apiReady = false, pendingId = null, apiRequested = false;
+
+  function loadApiOnce(){
+    if(apiRequested) return;
+    apiRequested = true;
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    // set origin meta if missing (helps on iOS)
+    if(!document.querySelector('meta[name="origin"]')){
+      try {
+        var meta = document.createElement('meta');
+        meta.name = "origin";
+        meta.content = location.origin;
+        document.head.appendChild(meta);
+      } catch(e){}
+    }
+  }
+
+  window.onYouTubeIframeAPIReady = function(){
+    apiReady = true;
+    // create the player on first need
+    if(pendingId) ensurePlayerAndPlay(pendingId);
+  };
+
+  function ensurePlayer(){
+    if(player) return player;
+    // Create player in hidden holder; must have enablejsapi & playsinline
+    player = new YT.Player('ytp', {
+      width: 1, height: 1,
+      playerVars: {
+        autoplay: 0, // will call playVideo() on click (user gesture)
+        controls: 0, rel: 0, modestbranding: 1, playsinline: 1, origin: location.origin
+      },
+      events: {
+        'onReady': function(){ if(pendingId){ loadAndPlay(pendingId); } },
+        'onError': function(e){ console.warn('YT error', e); }
+      }
+    });
+    // ensure allow attrs on the underlying iframe
+    try{
+      var iframe = player.getIframe();
+      iframe.setAttribute('allow', 'autoplay; encrypted-media; clipboard-write; picture-in-picture');
+    }catch(e){}
+    return player;
+  }
+
   function extractYouTubeId(url){
     if(!url) return null;
-    url = url.trim();
-    var idMatch = url.match(/^[a-zA-Z0-9_-]{11}$/);
-    if(idMatch) return idMatch[0];
+    url = String(url).trim();
     var m;
+    if(/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
     m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
     m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/); if(m) return m[1];
     m = url.match(/embed\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
@@ -1931,35 +1992,50 @@ document.addEventListener('DOMContentLoaded', function(){
     return null;
   }
 
-  function playYT(){
-    var inp = document.getElementById('ytUrl');
-    var iframe = document.getElementById('ytp');
-    if(!inp || !iframe){
-      alert('YouTube-Steuerung nicht gefunden.');
-      return;
+  function loadAndPlay(id){
+    try{
+      player.loadVideoById({videoId:id, startSeconds:0, suggestedQuality:'small'});
+      // Attempt immediate play within user gesture
+      player.playVideo();
+    }catch(e){ console.warn('play failed, will fallback', e); }
+  }
+
+  function ensurePlayerAndPlay(id){
+    pendingId = id;
+    if(window.YT && YT.Player){
+      ensurePlayer();
+      loadAndPlay(id);
+    }else{
+      loadApiOnce();
     }
-    var id = extractYouTubeId(inp.value);
-    if(!id){
-      alert('Bitte einen gültigen YouTube-Link oder die Video-ID eingeben.');
-      return;
-    }
-    var src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
-    if(document.getElementById('chkLoopYT')?.checked){
-      src += '&loop=1&playlist=' + id;
-    }
-    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
-    iframe.src = src;
+    // As a pragmatic fallback (some iOS builds), also set a plain embed once per click
+    try{
+      var iframe = document.querySelector('#ytp-holder iframe');
+      if(iframe){
+        iframe.src = "https://www.youtube.com/embed/"+id+"?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin="+encodeURIComponent(location.origin);
+        iframe.setAttribute('allow','autoplay; encrypted-media; clipboard-write; picture-in-picture');
+      }
+    }catch(e){}
   }
 
   function stopYT(){
-    var iframe = document.getElementById('ytp');
-    if(iframe) iframe.src = '';
+    try{
+      if(player){ player.stopVideo(); }
+      var iframe = document.querySelector('#ytp-holder iframe');
+      if(iframe){ iframe.src = ""; }
+    }catch(e){}
   }
 
+  // Wire buttons
   document.addEventListener('click', function(ev){
     var t = ev.target;
     if(!(t instanceof Element)) return;
-    if(t.id === 'btnPlayYT'){ playYT(); }
+    if(t.id === 'btnPlayYT'){
+      var inp = document.getElementById('ytUrl');
+      var id = extractYouTubeId(inp && inp.value);
+      if(!id){ alert('Bitte gültigen YouTube-Link oder die Video-ID eingeben.'); return; }
+      ensurePlayerAndPlay(id);
+    }
     if(t.id === 'btnStopYT'){ stopYT(); }
   }, {passive:true});
 })();
