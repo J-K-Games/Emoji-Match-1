@@ -339,8 +339,50 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 
 <!-- Firebase (v9 modular) -->
 <script type="module">
+// --- Login loader helpers ---
+function _loginLoaderShow() {
+  const bar = document.getElementById('loginLoader');
+  if (!bar) return;
+  bar.style.opacity = '1';
+  bar.style.width = '15%';
+  setTimeout(()=>{ try{ bar.style.width='65%'; }catch{} }, 150);
+}
+function _loginLoaderBump(p=95) {
+  const bar = document.getElementById('loginLoader'); if (!bar) return;
+  bar.style.width = p + '%';
+}
+function _loginLoaderHide() {
+  const bar = document.getElementById('loginLoader'); if (!bar) return;
+  bar.style.width = '100%';
+  setTimeout(()=>{ try{ bar.style.opacity='0'; bar.style.width='0'; }catch{} }, 200);
+}
+function nameToEmail(name){ return `${name}@em3.local`; }
+
+async function ensureAuthWithNamePass(name, pass, {createIfMissing=false}={}) {
+  const email = nameToEmail(name);
+  _loginLoaderShow();
+  try{
+    // Try sign-in first
+    let cred;
+    try{
+      cred = await signInWithEmailAndPassword(auth, email, pass);
+    } catch(e){
+      if(createIfMissing && e && e.code === 'auth/user-not-found'){
+        cred = await createUserWithEmailAndPassword(auth, email, pass);
+      } else {
+        throw e;
+      }
+    }
+    _loginLoaderBump(75);
+    return cred.user;
+  } finally {
+    _loginLoaderBump(98);
+    setTimeout(_loginLoaderHide, 200);
+  }
+}
+
   import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
   import { getFirestore } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
   // User config
   const firebaseConfig = {
@@ -556,10 +598,100 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 
 <div id="ytWrap" style="position:fixed; inset:auto 0 0 0; height:0; overflow:hidden;"></div>
 
-<script type="module">
+<script type="module">function _envCheckPreAuth() {
+  if (location.protocol === 'file:') {
+    alert("Diese Datei läuft lokal (file://). Firebase Auth funktioniert so nicht.\nBitte die HTML über HTTPS hosten (z.B. GitHub Pages) oder lokal über http-Server starten (z.B. 'python3 -m http.server').\nTipp: Domain in Firebase → Authentication → Settings → Authorized domains eintragen.");
+    return false;
+  }
+  if (!navigator.onLine) {
+    alert("Du bist offline. Prüfe deine Internetverbindung.");
+    return false;
+  }
+  return true;
+}
+function _explainNetworkError() {
+  alert([
+    "Login fehlgeschlagen (Netzwerkfehler). Häufige Ursachen:",
+    "1) Datei lokal geöffnet (file://). → Bitte über HTTPS hosten oder lokalen http-Server nutzen.",
+    "2) Domain nicht in Firebase Authentication → Authorized domains. Trage deine GitHub-Pages‑Domain + localhost ein.",
+    "3) Ad-/Tracking-Blocker oder DNS blockiert *.googleapis.com / *.gstatic.com → Whitelisten/Deaktivieren.",
+    "4) Sehr schlechte/instabile Verbindung."
+  ].join('\\n'));
+}
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+// === Auth helpers (scoped to this module) ===
+function _loginLoaderShow() {
+  const bar = document.getElementById('loginLoader');
+  if (!bar) return;
+  bar.style.opacity = '1';
+  bar.style.width = '15%';
+  setTimeout(()=>{ try{ bar.style.width='65%'; }catch{} }, 150);
+}
+function _loginLoaderBump(p=95) {
+  const bar = document.getElementById('loginLoader'); if (!bar) return;
+  bar.style.width = p + '%';
+}
+function _loginLoaderHide() {
+  const bar = document.getElementById('loginLoader'); if (!bar) return;
+  bar.style.width = '100%';
+  setTimeout(()=>{ try{ bar.style.opacity='0'; bar.style.width='0'; }catch{} }, 200);
+}
+function nameToEmail(name){ return `${name}@em3.local`; }
+async function ensureAuthWithNamePass(name, pass, {createIfMissing=false}={}) {
+  const email = nameToEmail(name);
+  _loginLoaderShow();
+  try{
+    let cred;
+    try{
+      cred = await signInWithEmailAndPassword(auth, email, pass);
+    } catch(e){
+      if(createIfMissing && e && e.code === 'auth/user-not-found'){
+        cred = await createUserWithEmailAndPassword(auth, email, pass);
+      } else {
+        throw e;
+      }
+    }
+    _loginLoaderBump(75);
+    return cred.user;
+  } finally {
+    _loginLoaderBump(98);
+    setTimeout(_loginLoaderHide, 200);
+  }
+}
+
 /* ---------- Error overlay ---------- */
 const errBox = document.getElementById('err');
-window.addEventListener('error', (e)=>{ errBox.style.display='block'; errBox.textContent = 'Fehler: ' + (e.message || e.error); });
+
+function showError(msg) {
+  try {
+    if (!msg) return;
+    const s = String(msg);
+    const ignore = [
+      'Script error', // cross-origin/iframe noise
+      'ResizeObserver loop limit exceeded',
+      'ResizeObserver loop completed with undelivered notifications'
+    ];
+    if (ignore.some(x => s.includes(x))) return;
+    errBox.style.display = 'block';
+    errBox.textContent = 'Fehler: ' + s;
+  } catch (_) {}
+}
+
+// Browser script errors
+window.addEventListener('error', (e) => {
+  // ignore iframe-originated errors
+  if (e && e.target && e.target.tagName === 'IFRAME') return;
+  const msg = (e && (e.message || e.error)) || 'Unbekannter Fehler';
+  showError(msg);
+});
+
+// Promise rejections (async)
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e && e.reason;
+  const msg = (r && (r.message || r)) || 'Unhandled rejection';
+  showError(msg);
+});
 
 /* ---------- Firebase (guarded) ---------- */
 let db=null, fb=null;
@@ -579,17 +711,10 @@ const FB_APP_VER = "10.12.4";
       appId: "1:779886305498:web:d8e0f24b214805904285e3",
       measurementId: "G-YE25QXV7PV"
     });
-    // Anonymous Auth to satisfy Firestore rules (request.auth != null)
-    const auth = getAuth(app);
-    try {
-      await signInAnonymously(auth);
-      window._authed = true;
-    } catch(e){
-      console.warn("Anonymous auth failed (enable in Firebase Console):", e);
-    }
-    window.auth = auth;
-
-    db = getFirestore(app);
+    
+const auth = getAuth(app);
+window.auth = getAuth(app);
+db = getFirestore(app);
     fb = {doc,setDoc,getDoc,updateDoc,collection,query,orderBy,limit,getDocs,onSnapshot,where,runTransaction,serverTimestamp};
     window.db=db; window.fb=fb;
   }catch(e){ console.log("Firebase nicht verfügbar:", e); }
@@ -1032,26 +1157,20 @@ document.getElementById('btnLogin').onclick = async ()=>{
   const name=$("#inpUser").value.trim(), pass=$("#inpPass").value;
   if(!name||!pass) return alert("Bitte Name & Passwort.");
   try{
-    if(await fbReady()){
-      const d = await fb.getDoc( fb.doc(db,"users",name) );
-      if(!d.exists()) return alert("Kein Konto gefunden.");
-      const data=d.data(); if(data.pass !== hash(pass)) return alert("Passwort falsch.");
-      user = {name}; points=data.points||0; bestScore=data.bestScore||0; selectedTrophy=data.selectedTrophy||null;
-      ownedEmojis=data.ownedEmojis||[]; customEmojis=data.customEmojis||DEFAULT_EMOJIS.slice();
-      setPerf(data.perfMode||perfMode);
-    } else {
-      // Lokaler Fallback (offline)
-      const users=localUsers(); if(!users[name]) return alert("Kein Konto (lokal) gefunden.");
-      if(users[name].pass!==hash(pass)) return alert("Passwort falsch.");
-      user={name}; ({points=0,bestScore=0,selectedTrophy=null,ownedEmojis=[],customEmojis=DEFAULT_EMOJIS} = users[name]);
-    }
+    await ensureAuthWithNamePass(name, pass, {createIfMissing:false});
+    const ref = fb.doc(db,"users",name);
+    const d = await fb.getDoc(ref);
+    if(!d.exists()) return alert("Kein Konto gefunden (Daten).");
+    const data=d.data();
+    if(data.pass !== hash(pass)) return alert("Passwort falsch.");
+    user = {name};
+    points=data.points||0; bestScore=data.bestScore||0; selectedTrophy=data.selectedTrophy||null;
+    ownedEmojis=data.ownedEmojis||[]; customEmojis=data.customEmojis||DEFAULT_EMOJIS.slice();
+    setPerf(data.perfMode||perfMode);
     openAccount();
   }catch(e){
-    if(e && e.code === "permission-denied"){
-      alert("Login fehlgeschlagen: Firestore-Regeln blocken den Zugriff (permission-denied). Aktiviere Anonymous Auth oder passe die Regeln an.");
-    }else{
-      alert("Login-Fehler: " + (e && (e.message||e) || "Unbekannt"));
-    }
+    if(e && e.code){ alert("Login-Fehler: "+e.code); }
+    else { alert("Login-Fehler: " + (e && (e.message||e) || "Unbekannt")); }
   }
 };
 document.getElementById('btnSignup').onclick = async ()=>{
@@ -1374,6 +1493,77 @@ initGrid();
 // Apply saved audio toggles
 if(localStorage.getItem("music")==="1"){ $("#btnMusic").textContent="AN"; AudioSys.setMusic(true); }
 if(localStorage.getItem("sfx")!=="0"){ $("#btnSound").textContent="AN"; AudioSys.setSfx(true); } else { AudioSys.setSfx(false); }
+
+// === DEV Diagnose (aktiv nur mit ?dev=1) ===
+if (new URLSearchParams(location.search).get('dev') === '1') {
+  // Button
+  const btn = document.createElement('button');
+  btn.textContent = 'Diagnose';
+  Object.assign(btn.style, {
+    position:'fixed', right:'8px', bottom:'8px', zIndex: 999999,
+    padding:'8px 10px', fontSize:'12px', borderRadius:'8px',
+    background:'#222', color:'#fff', border:'1px solid #555', opacity:'0.8'
+  });
+  btn.onclick = async () => {
+    const out = [];
+    function line(s){ out.push(s); }
+    const host = location.host;
+    line('--- EM3 Diagnose ---');
+    line('Origin: ' + location.origin);
+    line('Host: ' + host);
+    line('Online: ' + navigator.onLine);
+    try{
+      line('Ping gstatic...');
+      await fetch('https://www.gstatic.com/generate_204', {mode:'no-cors'});
+      line('  ok');
+    }catch(e){ line('  FAIL: ' + (e && (e.message||e))); }
+
+    try{
+      line('Ping googleapis...');
+      await fetch('https://www.googleapis.com/generate_204', {mode:'no-cors'});
+      line('  ok');
+    }catch(e){ line('  FAIL: ' + (e && (e.message||e))); }
+
+    try{
+      const cfg = window.firebaseConfig || (typeof firebaseConfig !== 'undefined' ? firebaseConfig : null);
+      if(!cfg) throw new Error('firebaseConfig fehlt.');
+      const apiKey = cfg.apiKey;
+      const projectId = cfg.projectId || (cfg.projectId === undefined ? null : cfg.projectId);
+      if(!apiKey) throw new Error('apiKey fehlt in firebaseConfig.');
+      if(!projectId) throw new Error('projectId fehlt in firebaseConfig.');
+      line('Projekt: ' + projectId);
+      // Hole Authorized Domains via IdentityToolkit
+      const url = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/config?key=${apiKey}`;
+      const res = await fetch(url);
+      const j = await res.json();
+      const domains = (j && j.authorizedDomains) || [];
+      line('Authorized domains: ' + JSON.stringify(domains));
+      const hostOnly = host.split(':')[0];
+      const ok = domains.includes(hostOnly) || domains.includes(location.hostname);
+      line('Aktueller Host autorisiert: ' + ok);
+      if(!ok){
+        line('HINWEIS: Trage diesen Host in Firebase Auth → Settings → Authorized domains ein.');
+      }
+      // Dummy signIn call (erwartet EMAIL_NOT_FOUND, wenn Netzwerk ok)
+      const email = 'diag_user___' + Math.random().toString(36).slice(2) + '@em3.local';
+      const test = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({ email, password:'x', returnSecureToken:true })
+      });
+      const tj = await test.json();
+      if(tj && tj.error){
+        line('SignIn test response: ' + (tj.error.message || JSON.stringify(tj.error)));
+      } else {
+        line('SignIn test response: OK (unerwartet)');
+      }
+    }catch(e){
+      line('Diagnose Fehler: ' + (e && (e.message||e)));
+    }
+    alert(out.join('\n'));
+  };
+  document.body.appendChild(btn);
+}
 </script>
 
   <!-- === Design Modal (isolated) === -->
@@ -1990,5 +2180,8 @@ document.addEventListener('DOMContentLoaded', function(){
   } catch(e){}
 })();
 </script>
+
+<div id="loginLoader" style="position:fixed;left:0;bottom:0;height:3px;width:0;opacity:0;transition:width .25s ease, opacity .2s linear;z-index:999999;background:linear-gradient(90deg,#7c5cff,#00d1ff,#7c5cff);"></div>
+
 </body>
 </html>
