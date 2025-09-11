@@ -2,7 +2,6 @@
 <html lang="de">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Emoji Match 3 — JK Games</title>
 <style>
   :root{
@@ -148,7 +147,7 @@
 
 /* === Mobile Lock & Layout === */
 html, body { overscroll-behavior: none !important; height: 100%; width: 100%; }
-body { position: fixed !important; overflow: hidden !important; inset: 0; touch-action: none !important; }
+body { position: fixed !important; overflow: hidden !important; inset: 0; touch-action: pinch-zoom !important; }
 [data-scrollable] { overflow: auto !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: contain !important; max-height: 80vh;  touch-action: pan-y !important; -ms-touch-action: pan-y !important;}
 
 @media (max-width: 640px) {
@@ -160,7 +159,7 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   #btnTop, #btnRestart { width: 100%; }
 }
 </style>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
+<style>
 /* ==== Mobile refinement v5 ==== */
 @media (max-width: 768px), (pointer: coarse) {
   /* header slightly thicker so perf bar fits */
@@ -374,6 +373,7 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   } catch(e){ console.warn('[EM3] auth init error', e); }
 </script>
 
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
 </head>
 <body class="high">
 <div id="app">
@@ -589,7 +589,7 @@ const FB_APP_VER = "10.12.4";
     }
     window.auth = auth;
 
-    db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true, useFetchStreams: false });
+    db = getFirestore(app);
     fb = {doc,setDoc,getDoc,updateDoc,collection,query,orderBy,limit,getDocs,onSnapshot,where,runTransaction,serverTimestamp};
     window.db=db; window.fb=fb;
   }catch(e){ console.log("Firebase nicht verfügbar:", e); }
@@ -1105,7 +1105,7 @@ document.getElementById('btnPlayYT').onclick = ()=>{
   const url=$("#ytUrl").value.trim(); if(!url){ alert("Bitte YouTube-Link einfügen."); return; }
   const id = (url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/)||[])[1];
   if(!id){ alert("Link nicht erkannt."); return; }
-  const wrap=document.getElementById('ytWrap'); wrap.innerHTML=`<iframe id="ytp" width="0" height="0" src="https://www.youtube.com/embed/${id}?autoplay=1&loop=1&playlist=${id}" frameborder="0" allow="autoplay"></iframe>`;
+  const wrap=document.getElementById('ytWrap'); wrap.innerHTML = `<iframe id="ytp" width="1" height="1" style="position:absolute;left:-9999px;opacity:0;" src="https://www.youtube.com/embed/${id}?autoplay=1&loop=1&playlist=${id}&playsinline=1&enablejsapi=1" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
 };
 
 function renderTrophies(){
