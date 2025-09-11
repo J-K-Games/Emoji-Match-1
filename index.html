@@ -160,7 +160,39 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   #btnTop, #btnRestart { width: 100%; }
 }
 </style>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"></head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
+/* === Mobile-only UX tweaks (non-destructive) === */
+@media (max-width: 768px){
+  /* Slightly thicker header so buttons don't clip */
+  header, .header, .topbar, .app-header {
+    min-height: 56px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  header, .header, .topbar, .app-header { position: relative; z-index: 10; }
+
+  /* Right-side vertical stack container */
+  #mobile-right-stack {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 9999;
+    pointer-events: none;
+  }
+  #mobile-right-stack > * { pointer-events: auto; }
+
+  #mobile-right-stack button,
+  #mobile-right-stack .btn,
+  #mobile-right-stack a[role="button"] {
+    transform: scale(0.95);
+    transform-origin: top right;
+  }
+}
+</style>
+</head>
 <body class="high">
 <div id="app">
   <header>
@@ -1160,20 +1192,6 @@ initGrid();
 // Apply saved audio toggles
 if(localStorage.getItem("music")==="1"){ $("#btnMusic").textContent="AN"; AudioSys.setMusic(true); }
 if(localStorage.getItem("sfx")!=="0"){ $("#btnSound").textContent="AN"; AudioSys.setSfx(true); } else { AudioSys.setSfx(false); }
-
-/* --- Mobile: lock page scroll/zoom; allow internal scroll (Leaderboard, Konto, etc.) --- */
-(() => {
-  document.querySelectorAll('.modal-body').forEach(el => el.setAttribute('data-scrollable',''));
-  ['gesturestart','gesturechange','gestureend'].forEach(evt => {
-    document.addEventListener(evt, e => e.preventDefault(), { passive: false });
-  });
-  window.addEventListener('wheel', (e) => {
-    if (e.ctrlKey || !e.target.closest('[data-scrollable]')) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-})();
-
 </script>
 
   <!-- === Design Modal (isolated) === -->
@@ -1438,6 +1456,68 @@ document.addEventListener('DOMContentLoaded', function(){
   applyBrand();
   window.addEventListener('resize', applyBrand);
   window.addEventListener('orientationchange', applyBrand);
+})();
+</script>
+<script>
+/* --- Mobile: lock pinch-zoom; allow internal scroll (Leaderboard, Konto, etc.) --- */
+(() => {
+  document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+  // Ensure modal-body elements are flagged
+  document.querySelectorAll('.modal-body').forEach(el => el.setAttribute('data-scrollable',''));
+})();
+</script>
+<script>
+/* === Mobile-only script: Reload access, 'Per:' label, right-aligned stacking of two buttons === */
+(() => {
+  const isMobile = matchMedia("(max-width: 768px)").matches;
+  if (!isMobile) return;
+
+  function findActionByText(pattern){
+    const nodes = Array.from(document.querySelectorAll('button, .btn, a, [role="button"]'));
+    return nodes.find(el => {
+      const t = (el.textContent || '').trim().toLowerCase();
+      return pattern.test(t);
+    });
+  }
+
+  // Create right-side stack container
+  let stack = document.getElementById('mobile-right-stack');
+  if (!stack){
+    stack = document.createElement('div');
+    stack.id = 'mobile-right-stack';
+    document.body.appendChild(stack);
+  }
+
+  // Add a small Reload button (so the user can always refresh)
+  if (!document.getElementById('mobile-reload-btn')){
+    const reloadBtn = document.createElement('button');
+    reloadBtn.id = 'mobile-reload-btn';
+    reloadBtn.type = 'button';
+    reloadBtn.title = 'Seite neu laden';
+    reloadBtn.textContent = '↻ Reload';
+    reloadBtn.addEventListener('click', () => location.reload());
+    stack.appendChild(reloadBtn);
+  }
+
+  // Move 'Bestenliste' and 'Neustart' into the stack and place them vertically
+  const leaderboardBtn = findActionByText(/bestenliste/);
+  if (leaderboardBtn && leaderboardBtn.parentElement !== stack) stack.appendChild(leaderboardBtn);
+
+  const restartBtn = findActionByText(/neustart/);
+  if (restartBtn && restartBtn.parentElement !== stack) stack.appendChild(restartBtn);
+
+  // Replace "Performance:" with "Per:" (text-only)
+  const candidates = Array.from(document.querySelectorAll('label, .label, .toolbar * , .topbar *, header *, .controls *'));
+  candidates.forEach(el => {
+    const txt = (el.textContent || '');
+    if (/performance\s*:?\s*$/i.test(txt.trim())) {
+      el.textContent = txt.replace(/performance\s*:?/i, 'Per:');
+    } else if (/^performance\s*:?/i.test(txt.trim())) {
+      el.textContent = txt.replace(/performance\s*:?/i, 'Per:');
+    }
+  });
 })();
 </script>
 </body>
