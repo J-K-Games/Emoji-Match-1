@@ -337,83 +337,7 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 })();
 </script>
 
-<!-- Firebase (v9 modular) -->
-<script type="module">
-// --- Login loader helpers ---
-function _loginLoaderShow() {
-  const bar = document.getElementById('loginLoader');
-  if (!bar) return;
-  bar.style.opacity = '1';
-  bar.style.width = '15%';
-  setTimeout(()=>{ try{ bar.style.width='65%'; }catch{} }, 150);
-}
-function _loginLoaderBump(p=95) {
-  const bar = document.getElementById('loginLoader'); if (!bar) return;
-  bar.style.width = p + '%';
-}
-function _loginLoaderHide() {
-  const bar = document.getElementById('loginLoader'); if (!bar) return;
-  bar.style.width = '100%';
-  setTimeout(()=>{ try{ bar.style.opacity='0'; bar.style.width='0'; }catch{} }, 200);
-}
-function nameToEmail(name){ return `${name}@em3.local`; }
 
-async function ensureAuthWithNamePass(name, pass, {createIfMissing=false}={}) {
-  const email = nameToEmail(name);
-  _loginLoaderShow();
-  try{
-    // Try sign-in first
-    let cred;
-    try{
-      cred = await signInWithEmailAndPassword(auth, email, pass);
-    } catch(e){
-      if(createIfMissing && e && e.code === 'auth/user-not-found'){
-        cred = await createUserWithEmailAndPassword(auth, email, pass);
-      } else {
-        throw e;
-      }
-    }
-    _loginLoaderBump(75);
-    return cred.user;
-  } finally {
-    _loginLoaderBump(98);
-    setTimeout(_loginLoaderHide, 200);
-  }
-}
-
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-  // User config
-  const firebaseConfig = {
-    apiKey: "AIzaSyBa-8wKtWpiFVFeUrNJedjYsuIQLbI0JLQ",
-    authDomain: "j-k--games.firebaseapp.com",
-    projectId: "j-k--games",
-    storageBucket: "j-k--games.firebasestorage.app",
-    messagingSenderId: "779886305498",
-    appId: "1:779886305498:web:d8e0f24b214805904285e3",
-    measurementId: "G-YE25QXV7PV"
-  };
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  window.EM3Firebase = { app, auth, db };
-
-  // Auto anonymous sign-in so a valid UID exists (no UI change)
-  try {
-    signInAnonymously(auth).catch((e)=>console.warn('[EM3] anon sign-in warn:', e?.code||e));
-    onAuthStateChanged(auth, (u) => {
-      if (u) {
-        try {
-          localStorage.setItem('EM3_UID', u.uid);
-          localStorage.setItem('EM3_SYNC_MODE','firebase');
-          localStorage.setItem('EM3_REQUIRE_REMOTE','1');
-        } catch(e){}
-        console.log('[EM3] Auth ready (anon)', u.uid);
-      }
-    });
-  } catch(e){ console.warn('[EM3] auth init error', e); }
-</script>
 
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
 </head>
@@ -598,7 +522,18 @@ async function ensureAuthWithNamePass(name, pass, {createIfMissing=false}={}) {
 
 <div id="ytWrap" style="position:fixed; inset:auto 0 0 0; height:0; overflow:hidden;"></div>
 
-<script type="module">function _envCheckPreAuth() {
+<script type="module">
+function _asEmail(input){ return String(input||'').trim(); }
+function _isEmail(s){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s); }
+function _deriveNameFromEmail(email){
+  try{
+    const local = email.split('@')[0].trim();
+    const sanitized = local.toLowerCase().replace(/[^a-z0-9_-]+/g,'').slice(0,24);
+    return sanitized || ('user' + Math.random().toString(36).slice(2,8));
+  }catch(_){ return 'user' + Math.random().toString(36).slice(2,8); }
+}
+
+function _envCheckPreAuth() {
   if (location.protocol === 'file:') {
     alert("Diese Datei läuft lokal (file://). Firebase Auth funktioniert so nicht.\nBitte die HTML über HTTPS hosten (z.B. GitHub Pages) oder lokal über http-Server starten (z.B. 'python3 -m http.server').\nTipp: Domain in Firebase → Authentication → Settings → Authorized domains eintragen.");
     return false;
@@ -620,6 +555,8 @@ function _explainNetworkError() {
 }
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
+
+const auth = window.auth;
 // === Auth helpers (scoped to this module) ===
 function _loginLoaderShow() {
   const bar = document.getElementById('loginLoader');
@@ -644,10 +581,10 @@ async function ensureAuthWithNamePass(name, pass, {createIfMissing=false}={}) {
   try{
     let cred;
     try{
-      cred = await signInWithEmailAndPassword(auth, email, pass);
+      cred = await signInWithEmailAndPassword(window.auth, email, pass);
     } catch(e){
       if(createIfMissing && e && e.code === 'auth/user-not-found'){
-        cred = await createUserWithEmailAndPassword(auth, email, pass);
+        cred = await createUserWithEmailAndPassword(window.auth, email, pass);
       } else {
         throw e;
       }
