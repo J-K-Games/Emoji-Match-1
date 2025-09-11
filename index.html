@@ -161,35 +161,36 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 }
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
-/* === Mobile-only UX tweaks (non-destructive) === */
-@media (max-width: 768px){
-  /* Slightly thicker header so buttons don't clip */
-  header, .header, .topbar, .app-header {
+/* ==== Mobile-only layout adjustments (non-destructive to themes) ==== */
+@media (max-width: 768px), (pointer: coarse) {
+  header, .header, .topbar {
     min-height: 56px;
     padding-top: 6px;
     padding-bottom: 6px;
   }
-  header, .header, .topbar, .app-header { position: relative; z-index: 10; }
-
-  /* Right-side vertical stack container */
-  #mobile-right-stack {
+  .btn-reload-mobile {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-    right: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    right: 70px; /* next to the Info button at bottom-right */
+    bottom: calc(12px + var(--safe-bottom, 0px));
+    width: 36px;
+    height: 36px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(6px);
+    font-size: 18px;
+    line-height: 36px;
+    text-align: center;
+    cursor: pointer;
     z-index: 9999;
-    pointer-events: none;
+    color: var(--fg, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
-  #mobile-right-stack > * { pointer-events: auto; }
-
-  #mobile-right-stack button,
-  #mobile-right-stack .btn,
-  #mobile-right-stack a[role="button"] {
-    transform: scale(0.95);
-    transform-origin: top right;
-  }
+  .btn-reload-mobile:active { transform: scale(0.96); }
 }
 </style>
 </head>
@@ -1459,65 +1460,86 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 </script>
 <script>
-/* --- Mobile: lock pinch-zoom; allow internal scroll (Leaderboard, Konto, etc.) --- */
+/* --- Mobile/Page: lock zoom & page scroll; allow internal scroll in [data-scrollable] --- */
 (() => {
-  document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
-  document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
-  document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
-  // Ensure modal-body elements are flagged
   document.querySelectorAll('.modal-body').forEach(el => el.setAttribute('data-scrollable',''));
+  ['gesturestart','gesturechange','gestureend'].forEach(evt => {
+    document.addEventListener(evt, e => e.preventDefault(), { passive: false });
+  });
+  window.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || !e.target.closest('[data-scrollable]')) {
+      e.preventDefault();
+    }
+  }, { passive: false });
 })();
 </script>
 <script>
-/* === Mobile-only script: Reload access, 'Per:' label, right-aligned stacking of two buttons === */
-(() => {
-  const isMobile = matchMedia("(max-width: 768px)").matches;
+/* ==== Mobile-only tweaks: reload button, "Per:" label, stack right buttons ==== */
+(function(){
+  const isMobile = window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
   if (!isMobile) return;
 
-  function findActionByText(pattern){
-    const nodes = Array.from(document.querySelectorAll('button, .btn, a, [role="button"]'));
-    return nodes.find(el => {
-      const t = (el.textContent || '').trim().toLowerCase();
-      return pattern.test(t);
+  // Mini reload button near bottom-right (beside existing Info)
+  if (!document.querySelector('.btn-reload-mobile')) {
+    const reloadBtn = document.createElement('button');
+    reloadBtn.className = 'btn-reload-mobile';
+    reloadBtn.setAttribute('aria-label', 'Reload');
+    reloadBtn.textContent = '↻';
+    reloadBtn.addEventListener('click', () => location.reload());
+    document.body.appendChild(reloadBtn);
+  }
+
+  // Replace "Performance:" -> "Per:" on mobile only (text nodes & common label wrappers)
+  try {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (!n.parentElement) continue;
+      const t = (n.nodeValue || "");
+      if (/^\s*Performance\s*:?\s*$/.test(t)) nodes.push(n);
+    }
+    nodes.forEach(n => n.nodeValue = "Per:");
+    const candidates = Array.from(document.querySelectorAll('[data-label="performance"], .perf-label, label, .label, .btn, .chip'))
+      .filter(el => /^Performance\s*:?\s*$/i.test(el.textContent.trim()));
+    candidates.forEach(el => el.textContent = 'Per:');
+  } catch(e){}
+
+  // Stack "Bestenliste" & "Neustart" vertically on the far right (mobile only)
+  function pickByText(txt) {
+    const els = Array.from(document.querySelectorAll('button, a, .btn, [role="button"]'));
+    return els.find(el => el.textContent.trim().toLowerCase() === txt.toLowerCase());
+  }
+  const leaderboardBtn =
+    document.querySelector('[data-action="leaderboard"], [data-role="leaderboard"]') ||
+    pickByText('Bestenliste');
+  const restartBtn =
+    document.querySelector('[data-action="restart"], [data-role="restart"]') ||
+    pickByText('Neustart');
+
+  const getTopOffset = () => {
+    const hdr = document.querySelector('header, .header, .topbar');
+    const h = hdr ? Math.max(56, hdr.getBoundingClientRect().height) : 56;
+    return Math.round(h) + 12;
+  };
+  const topOffset = getTopOffset();
+
+  if (leaderboardBtn) {
+    Object.assign(leaderboardBtn.style, {
+      position: 'fixed',
+      right: '12px',
+      top: `${topOffset}px`,
+      zIndex: '9999'
     });
   }
-
-  // Create right-side stack container
-  let stack = document.getElementById('mobile-right-stack');
-  if (!stack){
-    stack = document.createElement('div');
-    stack.id = 'mobile-right-stack';
-    document.body.appendChild(stack);
+  if (restartBtn) {
+    Object.assign(restartBtn.style, {
+      position: 'fixed',
+      right: '12px',
+      top: `${topOffset + 44}px`,
+      zIndex: '9999'
+    });
   }
-
-  // Add a small Reload button (so the user can always refresh)
-  if (!document.getElementById('mobile-reload-btn')){
-    const reloadBtn = document.createElement('button');
-    reloadBtn.id = 'mobile-reload-btn';
-    reloadBtn.type = 'button';
-    reloadBtn.title = 'Seite neu laden';
-    reloadBtn.textContent = '↻ Reload';
-    reloadBtn.addEventListener('click', () => location.reload());
-    stack.appendChild(reloadBtn);
-  }
-
-  // Move 'Bestenliste' and 'Neustart' into the stack and place them vertically
-  const leaderboardBtn = findActionByText(/bestenliste/);
-  if (leaderboardBtn && leaderboardBtn.parentElement !== stack) stack.appendChild(leaderboardBtn);
-
-  const restartBtn = findActionByText(/neustart/);
-  if (restartBtn && restartBtn.parentElement !== stack) stack.appendChild(restartBtn);
-
-  // Replace "Performance:" with "Per:" (text-only)
-  const candidates = Array.from(document.querySelectorAll('label, .label, .toolbar * , .topbar *, header *, .controls *'));
-  candidates.forEach(el => {
-    const txt = (el.textContent || '');
-    if (/performance\s*:?\s*$/i.test(txt.trim())) {
-      el.textContent = txt.replace(/performance\s*:?/i, 'Per:');
-    } else if (/^performance\s*:?/i.test(txt.trim())) {
-      el.textContent = txt.replace(/performance\s*:?/i, 'Per:');
-    }
-  });
 })();
 </script>
 </body>
