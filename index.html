@@ -266,6 +266,24 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   .btn-reload-mobile { display: none !important; }
 }
 </style>
+
+<!-- EM3 force-cloud-sync shim -->
+<script>
+(() => {
+  const isHosted = (location.protocol === 'https:')
+                || /\.github\.io$/i.test(location.hostname)
+                || location.hostname === 'localhost';
+  try {
+    if (isHosted) {
+      // Hint flags for the app to use Firebase/remote DB instead of local-only mode.
+      localStorage.setItem('EM3_SYNC_MODE', 'firebase');
+      localStorage.setItem('EM3_REQUIRE_REMOTE', '1');
+      localStorage.setItem('EM3_DISABLE_LOCAL_WARNING', '1');
+    }
+  } catch(e) {}
+})();
+</script>
+
 </head>
 <body class="high">
 <div id="app">
