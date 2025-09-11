@@ -146,54 +146,26 @@
     box-shadow: 0 10px 30px rgba(0,0,0,0.2), inset 0 0 0 2px rgba(74,59,115,0.7);
   }
 
-/* === Mobile Lock & Compact Header (added) === */
-html, body {
-  overscroll-behavior: none !important;
-  touch-action: none !important;
-  height: 100%;
-  width: 100%;
-}
-body {
-  position: fixed !important;
-  overflow: hidden !important;
-  inset: 0;
-}
-/* Compact header for small screens */
+/* === Mobile Lock & Layout === */
+html, body { overscroll-behavior: none !important; height: 100%; width: 100%; }
+body { position: fixed !important; overflow: hidden !important; inset: 0; touch-action: none !important; }
+[data-scrollable] { overflow: auto !important; -webkit-overflow-scrolling: touch !important; overscroll-behavior: contain !important; max-height: 80vh; }
+
 @media (max-width: 640px) {
-  header {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
-    row-gap: .4rem;
-    justify-items: start;
-  }
-  .brand {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    gap: .4rem;
-    align-items: center;
-    justify-items: start;
-  }
+  header { display: grid; grid-template-columns: 1fr; grid-auto-rows: auto; row-gap: .4rem; justify-items: start; }
+  .brand { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: .4rem; align-items: center; justify-items: start; }
   .brand .dot { display: none; }
   #score, #points { margin: 0; }
-  .hdr-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: .4rem;
-    justify-items: start;
-    width: 100%;
-  }
   #btnPerf { justify-self: start; }
   #btnTop, #btnRestart { width: 100%; }
 }
 </style>
-</head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"></head>
 <body class="high">
 <div id="app">
   <header>
     <div class="brand">
-      <span class="dot"></span> <span id="brandText">e.m.3</span>
+      <span class="dot"></span><span id="brandText">e.m.3</span>
       <span id="score" class="badge">Score: 0</span>
       <span id="points" class="badge">Punkte: 0</span>
     </div>
@@ -381,7 +353,7 @@ const FB_APP_VER = "10.12.4";
 (async ()=>{
   try{
     const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-app.js`);
-    const { initializeFirestore, getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, limit, getDocs, onSnapshot, where, runTransaction, serverTimestamp} =
+    const { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, limit, getDocs, onSnapshot, where, runTransaction, serverTimestamp } =
       await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-firestore.js`);
     const { getAuth, signInAnonymously } = await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-auth.js`);
     const app = initializeApp({
@@ -1290,8 +1262,16 @@ if(localStorage.getItem("sfx")!=="0"){ $("#btnSound").textContent="AN"; AudioSys
     }
 
     function applyUltra(){
-            const board = document.getElementById('board'); if(board) board.style.background = '';
-      const link = localStorage.getItem('design_ultra_yt');
+      
+  // --- ensure Ultra stays transparent: clear any inline backgrounds from other modes ---
+  try {
+    const root = document.documentElement;
+    root && root.style && root.style.removeProperty && root.style.removeProperty('--bg');
+    if (document.body) document.body.style.background = '';
+    const board = document.getElementById('board');
+    if (board) board.style.background = '';
+  } catch(e) { /* ignore */ }
+const link = localStorage.getItem('design_ultra_yt');
       const ytId = extractYTId(link || '');
       const layer = ensureYTLayer();
       const bgCanvas = document.getElementById('bgCanvas');
@@ -1392,7 +1372,6 @@ if(localStorage.getItem("sfx")!=="0"){ $("#btnSound").textContent="AN"; AudioSys
       localStorage.removeItem('design_ultra_yt');
       const layer = document.getElementById('yt-live-bg'); if(layer) layer.innerHTML='';
       const bgCanvas = document.getElementById('bgCanvas'); if(bgCanvas) bgCanvas.style.opacity='';
-      const board = document.getElementById('board'); if(board) board.style.background='';
       loadFields();
       if(currentPerfMode() === 'Ultra'){ applyDesignForCurrentMode(); }
     }
@@ -1419,254 +1398,32 @@ document.addEventListener('DOMContentLoaded', function(){
   </script>
 
 
-<!-- JK-MOD-MENU-INJECTED -->
-<script>
-(() => {
-  'use strict';
-  if (window.__JK_MOD_MENU__) return; // prevent double init
-  window.__JK_MOD_MENU__ = true;
-
-  function ready(fn) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
-    else fn();
-  }
-
-  const ADMIN_CODE_EXPECTED = "140318"; // entspricht deiner Datei
-
-  // dieselbe Hash-Funktion wie in deiner HTML
-  function hash(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h<<5)-h + s.charCodeAt(i); h|=0; } return String(h); }
-
-  function getFB() {
-    // erwartet, dass deine Seite window.db und window.fb exportiert
-    if (window.db && window.fb) return { db: window.db, fb: window.fb };
-    console.warn('[JK-MOD] window.db/window.fb nicht gefunden. Öffne zuerst die Seite normal (inkl. Login), damit Firebase initialisiert ist.');
-    return null;
-  }
-
-  ready(() => {
-    // Floating Button
-    const btn = document.createElement('div');
-    btn.id = '_jk_mod_fab';
-    Object.assign(btn.style, { position:'fixed', right:'16px', bottom:'16px', width:'56px', height:'56px', borderRadius:'50%',
-      display:'grid', placeItems:'center', cursor:'pointer', fontSize:'24px', background:'#2a1d4b', color:'#fff',
-      border:'2px solid #3a2c63', boxShadow:'0 10px 20px rgba(0,0,0,.35)', zIndex: 2147483646, userSelect:'none' });
-    btn.textContent = '🛡️';
-    btn.title = 'Externes Mod-Menü öffnen';
-    document.documentElement.appendChild(btn);
-
-    // Modal
-    const modalWrap = document.createElement('div');
-    modalWrap.id = '_jk_mod_wrap';
-    Object.assign(modalWrap.style, { position:'fixed', inset:'0', background:'rgba(0,0,0,.5)', display:'none', zIndex: 2147483647 });
-
-    const modal = document.createElement('div');
-    Object.assign(modal.style, { position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', width:'min(96vw, 880px)',
-      maxHeight:'80vh', overflow:'auto', background:'linear-gradient(180deg,#1b1230,#120b22)', color:'#fff', border:'1px solid #3a2c63',
-      borderRadius:'16px', boxShadow:'0 20px 40px rgba(0,0,0,.5)', padding:'0' });
-
-    const head = document.createElement('div');
-    head.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem;border-bottom:1px solid #2a2146;">
-        <div style="font-weight:800">Externes Admin/Mod-Menü</div>
-        <div>
-          <button id="_jk_close" style="background:#2a1d4b;border:0;border-radius:10px;padding:.4rem .7rem;color:#fff;cursor:pointer">Schließen</button>
-        </div>
-      </div>`;
-
-    const body = document.createElement('div');
-    Object.assign(body.style, { padding:'1rem' });
-    body.innerHTML = `
-      <div id="_jk_login">
-        <div style="font-weight:700;margin-bottom:.4rem;">Admin-Login</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;max-width:680px;">
-          <div><label style="display:block;font-size:.9rem;margin-bottom:.15rem;">Name</label><input id="_jk_name" placeholder="J-K-Games" style="width:100%;background:#23183d;border:1px solid #3a2c63;border-radius:10px;color:#fff;padding:.5rem .6rem;"></div>
-          <div><label style="display:block;font-size:.9rem;margin-bottom:.15rem;">Passwort</label><input id="_jk_pass" type="password" placeholder="••••••" style="width:100%;background:#23183d;border:1px solid #3a2c63;border-radius:10px;color:#fff;padding:.5rem .6rem;"></div>
-          <div><label style="display:block;font-size:.9rem;margin-bottom:.15rem;">Bestätigungscode</label><input id="_jk_code" placeholder="140318" style="width:100%;background:#23183d;border:1px solid #3a2c63;border-radius:10px;color:#fff;padding:.5rem .6rem;"></div>
-        </div>
-        <div style="margin-top:.6rem;">
-          <button id="_jk_dologin" style="background:linear-gradient(180deg,#6f5cff,#5a46f9);border:0;border-radius:999px;padding:.5rem .9rem;color:#fff;font-weight:700;cursor:pointer;">Einloggen</button>
-          <span id="_jk_msg" style="margin-left:.6rem;color:#c2bed6;"></span>
-        </div>
-        <hr style="border-color:#2a2146;margin:1rem 0;">
-      </div>
-      <div id="_jk_panel" style="display:none;">
-        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
-          <input id="_jk_filter" placeholder="Spieler suchen (Name enthält …)" style="flex:1;min-width:220px;background:#23183d;border:1px solid #3a2c63;border-radius:10px;color:#fff;padding:.5rem .6rem;">
-          <button id="_jk_reload" style="background:#2a1d4b;border:0;border-radius:10px;padding:.5rem .8rem;color:#fff;cursor:pointer;">Neu laden</button>
-          <span id="_jk_stat" style="color:#c2bed6;"></span>
-        </div>
-        <div id="_jk_list" style="margin-top:.8rem;display:grid;gap:.5rem;"></div>
-      </div>`;
-
-    modal.appendChild(head);
-    modal.appendChild(body);
-    modalWrap.appendChild(modal);
-    document.documentElement.appendChild(modalWrap);
-
-    head.querySelector('#_jk_close').onclick = () => modalWrap.style.display = 'none';
-    btn.onclick = () => modalWrap.style.display = 'block';
-
-    // Elements
-    const elName = body.querySelector('#_jk_name');
-    const elPass = body.querySelector('#_jk_pass');
-    const elCode = body.querySelector('#_jk_code');
-    const elMsg  = body.querySelector('#_jk_msg');
-    const elDoLogin = body.querySelector('#_jk_dologin');
-
-    const elList  = body.querySelector('#_jk_list');
-    const elStat  = body.querySelector('#_jk_stat');
-    const elFilt  = body.querySelector('#_jk_filter');
-    const elReload= body.querySelector('#_jk_reload');
-
-    let _unsub = null;
-    let _cache = [];
-
-    function renderList(){
-      const term = (elFilt.value || '').toLowerCase();
-      elList.innerHTML = '';
-      const rows = _cache
-        .filter(d => !term || String(d.id).toLowerCase().includes(term))
-        .sort((a,b)=> (b.bestScore||0)-(a.bestScore||0) || String(a.id).localeCompare(String(b.id)));
-      elStat.textContent = `${rows.length} Spieler angezeigt`;
-      rows.forEach(d=>{
-        const row = document.createElement('div');
-        Object.assign(row.style, { display:'grid', gridTemplateColumns:'1.3fr .8fr .8fr .9fr', gap:'.5rem', background:'#23183d', padding:'.55rem .6rem', borderRadius:'10px' });
-        row.innerHTML = `
-          <div><b>${d.id}</b></div>
-          <div><input type="number" class="_jk_best" value="${d.bestScore||0}" style="width:100%;background:#21163a;border:1px solid #3a2c63;border-radius:8px;color:#fff;padding:.35rem .5rem;"></div>
-          <div><input type="number" class="_jk_points" value="${d.points||0}" style="width:100%;background:#21163a;border:1px solid #3a2c63;border-radius:8px;color:#fff;padding:.35rem .5rem;"></div>
-          <div style="display:flex;gap:.4rem;justify-content:flex-end;">
-            <button class="_jk_save"   style="background:#2a1d4b;border:0;border-radius:8px;padding:.35rem .6rem;color:#fff;cursor:pointer;">Speichern</button>
-            <button class="_jk_plus1k" style="background:#2a1d4b;border:0;border-radius:8px;padding:.35rem .6rem;color:#fff;cursor:pointer;">+1.000</button>
-            <button class="_jk_rename" style="background:#2a1d4b;border:0;border-radius:8px;padding:.35rem .6rem;color:#fff;cursor:pointer;">Rename…</button>
-          </div>
-        `;
-        const inpBest   = row.querySelector('._jk_best');
-        const inpPoints = row.querySelector('._jk_points');
-        const btnSave   = row.querySelector('._jk_save');
-        const btnPlus   = row.querySelector('._jk_plus1k');
-        const btnRen    = row.querySelector('._jk_rename');
-
-        btnSave.onclick = async ()=>{
-          const fbCtx = getFB(); if (!fbCtx) return alert('Firebase Kontext fehlt');
-          const { db, fb } = fbCtx;
-          const best = parseInt(inpBest.value||'0',10);
-          const pts  = parseInt(inpPoints.value||'0',10);
-          try{
-            await fb.updateDoc( fb.doc(db,'users', d.id), { bestScore: best, points: pts } );
-            await fb.setDoc( fb.doc(db,'leaderboard', d.id), { user: d.id, score: best }, { merge:true } );
-          }catch(e){ alert('Speichern fehlgeschlagen: ' + (e && (e.message||e))); }
-        };
-        btnPlus.onclick = async ()=>{
-          const fbCtx = getFB(); if (!fbCtx) return alert('Firebase Kontext fehlt');
-          const { db, fb } = fbCtx;
-          const curr = parseInt(inpPoints.value||'0',10) + 1000;
-          inpPoints.value = String(curr);
-          try{ await fb.updateDoc( fb.doc(db,'users', d.id), { points: curr } ); }
-          catch(e){ alert('Update fehlgeschlagen: ' + (e && (e.message||e))); }
-        };
-        btnRen.onclick = async ()=>{
-          const fbCtx = getFB(); if (!fbCtx) return alert('Firebase Kontext fehlt');
-          const { db, fb } = fbCtx;
-          const nn = prompt('Neuer Name für "'+d.id+'":');
-          if(!nn) return;
-          try{
-            const ex = await fb.getDoc( fb.doc(db,'users', nn) );
-            if(ex.exists()){ alert('Name belegt.'); return; }
-            const oldData = Object.assign({}, d); delete oldData.id;
-            await fb.setDoc( fb.doc(db,'users', nn), oldData );
-            await fb.setDoc( fb.doc(db,'users', d.id), { renamedTo: nn }, { merge:true } );
-            await fb.setDoc( fb.doc(db,'leaderboard', nn), { user: nn, score: oldData.bestScore||0 }, { merge:true } );
-            alert('Umbenannt zu: ' + nn);
-          }catch(e){ alert('Rename fehlgeschlagen: ' + (e && (e.message||e))); }
-        };
-
-        elList.appendChild(row);
-      });
-    }
-
-    async function loadPlayers(){
-      const fbCtx = getFB(); if (!fbCtx) { elStat.textContent = 'Firebase nicht initialisiert'; return; }
-      const { db, fb } = fbCtx;
-      if(_unsub){ try{ _unsub(); }catch{} _unsub = null; }
-      try{
-        _unsub = fb.onSnapshot(
-          fb.query( fb.collection(db,'users') ),
-          (snap)=>{
-            _cache = snap.docs.map(d=>({ id: d.id, ...d.data() }));
-            renderList();
-          },
-          (err)=>{ elStat.textContent = 'Fehler: ' + (err && (err.message||err)); }
-        );
-        elStat.textContent = 'Verbunden…';
-      }catch(e){
-        try{
-          const qs = await fb.getDocs( fb.query( fb.collection(db,'users') ) );
-          _cache = qs.docs.map(d=>({ id: d.id, ...d.data() }));
-          renderList();
-        }catch(e2){ elStat.textContent = 'Laden fehlgeschlagen: ' + (e2 && (e2.message||e2)); }
-      }
-    }
-
-    elFilt.addEventListener('input', renderList);
-    elReload.onclick = loadPlayers;
-
-    // Login handler
-    elDoLogin.onclick = async ()=>{
-      const name = (elName.value || 'J-K-Games').trim();
-      const pass = (elPass.value || '').trim();
-      const code = (elCode.value || '').trim();
-      if(!name || !pass || !code){ elMsg.textContent = 'Bitte Name, Passwort, Code eingeben.'; return; }
-      if(code !== ADMIN_CODE_EXPECTED){ elMsg.textContent = 'Bestätigungscode falsch.'; return; }
-
-      const fbCtx = getFB(); if (!fbCtx) { elMsg.textContent = 'Firebase nicht initialisiert (öffne/aktualisiere die Seite)'; return; }
-      const { db, fb } = fbCtx;
-      elMsg.textContent = 'Prüfe…';
-      try{
-        const snap = await fb.getDoc( fb.doc(db, 'users', name) );
-        if(!snap.exists()){ elMsg.textContent = 'Admin-Konto nicht gefunden.'; return; }
-        const data = snap.data();
-        if(String(data.pass) !== hash(pass)){ elMsg.textContent = 'Passwort falsch.'; return; }
-        // ok
-        body.querySelector('#_jk_login').style.display = 'none';
-        body.querySelector('#_jk_panel').style.display = 'block';
-        elMsg.textContent = '';
-        loadPlayers();
-      }catch(e){ elMsg.textContent = 'Login-Fehler: ' + (e && (e.message||e) || 'Unbekannt'); }
-    };
-  });
-})();
-</script>
 
 <script>
-// === Mobile Lock: prevent zoom & scroll ===
 (function(){
-  try{
-    // prevent pinch-zoom / ctrl+wheel zoom
-    window.addEventListener('wheel', function(e){ if (e.ctrlKey) { e.preventDefault(); } }, { passive: false });
-    window.addEventListener('gesturestart', function(e){ e.preventDefault(); });
-    // prevent double-tap zoom
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', function(e){
-      const now = Date.now();
-      if (now - lastTouchEnd <= 300) { e.preventDefault(); }
-      lastTouchEnd = now;
-    }, { passive: false });
-    // prevent scrolling everywhere
-    document.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive: false });
-  }catch(err){ console.warn('mobile lock failed', err); }
+  function isWithinScrollable(t){ return t && t.closest && t.closest('[data-scrollable]'); }
+  window.addEventListener('wheel', function(e){ if (e.ctrlKey) e.preventDefault(); }, { passive:false });
+  window.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function(e){ var now=Date.now(); if(now - lastTouchEnd <= 300){ e.preventDefault(); } lastTouchEnd = now; }, { passive:false });
+  document.addEventListener('touchmove', function(e){ if(isWithinScrollable(e.target)) return; e.preventDefault(); }, { passive:false });
 
-  // Optional: keep brand compact label on small screens; expand on larger screens if desired
-  var brand = document.getElementById('brandText');
-  if (brand){
-    function applyBrand(){
-      if (window.matchMedia('(max-width: 640px)').matches) brand.textContent = 'e.m.3';
-      else brand.textContent = 'Emoji Match 3';
-    }
-    applyBrand();
-    window.addEventListener('resize', applyBrand);
-    window.addEventListener('orientationchange', applyBrand);
+  function markScrollable(){
+    ['#dlgAccount', '#dlgAdminLogin', '#topList', '.modal', '.panel', '.account', '.leaderboard'].forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){ el.setAttribute('data-scrollable','1'); });
+    });
   }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', markScrollable, {once:true}); else markScrollable();
+
+  var brand = document.getElementById('brandText');
+  function applyBrand(){
+    if(!brand) return;
+    if (window.matchMedia('(max-width: 640px)').matches) brand.textContent = 'e.m.3';
+    else brand.textContent = 'Emoji Match 3';
+  }
+  applyBrand();
+  window.addEventListener('resize', applyBrand);
+  window.addEventListener('orientationchange', applyBrand);
 })();
 </script>
 </body>
