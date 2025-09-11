@@ -159,6 +159,21 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   #btnPerf { justify-self: start; }
   #btnTop, #btnRestart { width: 100%; }
 }
+
+/* --- OFFICIAL v11: Konto scroll fix --- */
+.modal-body[data-scrollable],
+#dlgAccount .modal-body,
+#accountPanel .modal-body,
+#account, #konto, [data-panel="konto"], [aria-labelledby="tab-konto"] {
+  max-height: calc(100vh - 140px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  touch-action: pan-y !important;
+}
+body.modal-open { overscroll-behavior-y: none; }
+.modal-body input, .modal-body select, .modal-body textarea { font-size: 16px; }
+
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
 /* ==== Mobile refinement v5 ==== */
@@ -1015,7 +1030,7 @@ document.getElementById('btnPlayYT').onclick = ()=>{
   const url=$("#ytUrl").value.trim(); if(!url){ alert("Bitte YouTube-Link einfügen."); return; }
   const id = (url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/)||[])[1];
   if(!id){ alert("Link nicht erkannt."); return; }
-  const wrap=document.getElementById('ytWrap'); wrap.innerHTML=`<iframe id="ytp" width="0" height="0" src="https://www.youtube.com/embed/${id}?autoplay=1&loop=1&playlist=${id}" frameborder="0" allow="autoplay"></iframe>`;
+  const wrap=document.getElementById('ytWrap'); wrap.innerHTML=`<iframe id="ytp" title="YouTube Player" width="1" height="1" style="position:fixed;left:-9999px;top:auto;width:1px;height:1px;opacity:0;pointer-events:none" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe>`;
 };
 
 function renderTrophies(){
@@ -1898,6 +1913,55 @@ document.addEventListener('DOMContentLoaded', function(){
       .filter(el => /^Performance\s*:?\s*$/i.test(el.textContent.trim()));
     candidates.forEach(el => el.textContent = 'Per:');
   } catch(e){}
+})();
+</script>
+<script>
+// --- OFFICIAL v11: YouTube music playback ---
+(function(){
+  function extractYouTubeId(url){
+    if(!url) return null;
+    url = url.trim();
+    var idMatch = url.match(/^[a-zA-Z0-9_-]{11}$/);
+    if(idMatch) return idMatch[0];
+    var m;
+    m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
+    m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/); if(m) return m[1];
+    m = url.match(/embed\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
+    m = url.match(/shorts\/([a-zA-Z0-9_-]{11})/); if(m) return m[1];
+    return null;
+  }
+
+  function playYT(){
+    var inp = document.getElementById('ytUrl');
+    var iframe = document.getElementById('ytp');
+    if(!inp || !iframe){
+      alert('YouTube-Steuerung nicht gefunden.');
+      return;
+    }
+    var id = extractYouTubeId(inp.value);
+    if(!id){
+      alert('Bitte einen gültigen YouTube-Link oder die Video-ID eingeben.');
+      return;
+    }
+    var src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
+    if(document.getElementById('chkLoopYT')?.checked){
+      src += '&loop=1&playlist=' + id;
+    }
+    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+    iframe.src = src;
+  }
+
+  function stopYT(){
+    var iframe = document.getElementById('ytp');
+    if(iframe) iframe.src = '';
+  }
+
+  document.addEventListener('click', function(ev){
+    var t = ev.target;
+    if(!(t instanceof Element)) return;
+    if(t.id === 'btnPlayYT'){ playYT(); }
+    if(t.id === 'btnStopYT'){ stopYT(); }
+  }, {passive:true});
 })();
 </script>
 </body>
