@@ -285,95 +285,6 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 </script>
 
 
-<!-- EM3 cloud/bootstrap shim -->
-<script>
-(() => {
-  // 1) Force remote/cloud mode when hosted
-  const hosted = (location.protocol === 'https:') || /\.github\.io$/i.test(location.hostname);
-  try {
-    if (hosted) {
-      localStorage.setItem('EM3_SYNC_MODE','firebase');
-      localStorage.setItem('EM3_REQUIRE_REMOTE','1');
-      localStorage.setItem('EM3_DISABLE_LOCAL_WARNING','1');
-    }
-  } catch(e){}
-
-  // 2) So the old code doesn't block with "kein Konto (lokal) gefunden":
-  //    - pre-seed a lightweight local account stub if none exists
-  //    - and silence that specific alert message
-  (function seedLocalAccount(){
-    try {
-      const keys = [
-        'EM3_USER','EM3_ACCOUNT','em3_user','em3_account',
-        'ACCOUNT','account','user','username','konto_user'
-      ];
-      let hasAny = false;
-      for (const k of keys) { if (localStorage.getItem(k)) { hasAny = true; break; } }
-      if (!hasAny) {
-        const stub = {
-          uid: 'em3_' + Math.random().toString(36).slice(2,9),
-          name: 'Gast',
-          createdAt: Date.now()
-        };
-        localStorage.setItem('EM3_USER', JSON.stringify(stub));
-        localStorage.setItem('user', stub.name);
-        localStorage.setItem('hasAccount','1');
-        document.cookie = 'EM3_USER=' + encodeURIComponent(JSON.stringify(stub)) + '; path=/; max-age=31536000';
-      }
-    } catch(e){}
-  })();
-
-  (function silenceSpecificAlert(){
-    const nativeAlert = window.alert;
-    window.alert = function(msg){
-      try {
-        if (typeof msg === 'string' && msg.toLowerCase().includes('kein konto') && msg.toLowerCase().includes('lokal')) {
-          console.info('[EM3] Suppressed local-only account alert:', msg);
-          return;
-        }
-      } catch(e){}
-      return nativeAlert.apply(window, arguments);
-    };
-  })();
-})();
-</script>
-
-<!-- Firebase (v9 modular) -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-  // User config
-  const firebaseConfig = {
-    apiKey: "AIzaSyBa-8wKtWpiFVFeUrNJedjYsuIQLbI0JLQ",
-    authDomain: "j-k--games.firebaseapp.com",
-    projectId: "j-k--games",
-    storageBucket: "j-k--games.firebasestorage.app",
-    messagingSenderId: "779886305498",
-    appId: "1:779886305498:web:d8e0f24b214805904285e3",
-    measurementId: "G-YE25QXV7PV"
-  };
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  window.EM3Firebase = { app, auth, db };
-
-  // Auto anonymous sign-in so a valid UID exists (no UI change)
-  try {
-    signInAnonymously(auth).catch((e)=>console.warn('[EM3] anon sign-in warn:', e?.code||e));
-    onAuthStateChanged(auth, (u) => {
-      if (u) {
-        try {
-          localStorage.setItem('EM3_UID', u.uid);
-          localStorage.setItem('EM3_SYNC_MODE','firebase');
-          localStorage.setItem('EM3_REQUIRE_REMOTE','1');
-        } catch(e){}
-        console.log('[EM3] Auth ready (anon)', u.uid);
-      }
-    });
-  } catch(e){ console.warn('[EM3] auth init error', e); }
-</script>
-
 </head>
 <body class="high">
 <div id="app">
@@ -476,7 +387,7 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 <dialog id="dlgAccount">
   <div class="modal-header">
     <div style="font-weight:800;">Konto</div>
-    <div class="chip" id="chipUser">Abgemeldet</div>
+    <div class="chip" id="chipUser">Abgemeldet</div><div class="chip" title="Cloud-Modus">OFFICIAL</div>
     <button class="btn small" onclick="document.getElementById('dlgAccount').close()">Schließen</button>
   </div>
   <div class="modal-body" data-scrollable>
@@ -589,7 +500,7 @@ const FB_APP_VER = "10.12.4";
     }
     window.auth = auth;
 
-    db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true, useFetchStreams: false });
+    db = getFirestore(app);
     fb = {doc,setDoc,getDoc,updateDoc,collection,query,orderBy,limit,getDocs,onSnapshot,where,runTransaction,serverTimestamp};
     window.db=db; window.fb=fb;
   }catch(e){ console.log("Firebase nicht verfügbar:", e); }
@@ -1022,11 +933,10 @@ async function openAccount(){
   $("#chipUser").textContent=user.name; $("#accName").textContent=user.name; $("#accPoints").textContent=points; $("#accBest").textContent=bestScore;
   renderTrophies();
 }
-async function fbReady(timeout=8000){
+async function fbReady(timeout=12000){
   const start=performance.now(); while(!db && performance.now()-start<timeout){ await sleep(100); } return !!db;
 }
-function localUsers(){ try{ return JSON.parse(localStorage.getItem("localUsers")||"{}"); }catch{ return {}; } }
-function saveLocalUsers(users){ localStorage.setItem("localUsers", JSON.stringify(users)); }
+
 
 document.getElementById('btnLogin').onclick = async ()=>{
   const name=$("#inpUser").value.trim(), pass=$("#inpPass").value;
