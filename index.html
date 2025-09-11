@@ -161,36 +161,20 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
 }
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
-/* ==== Mobile-only layout adjustments (non-destructive to themes) ==== */
+/* ==== Mobile refinement v5 ==== */
 @media (max-width: 768px), (pointer: coarse) {
+  /* header slightly thicker so perf bar fits */
   header, .header, .topbar {
-    min-height: 56px;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    min-height: 72px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
   }
-  .btn-reload-mobile {
-    position: fixed;
-    right: 70px; /* next to the Info button at bottom-right */
-    bottom: calc(12px + var(--safe-bottom, 0px));
-    width: 36px;
-    height: 36px;
-    border-radius: 9999px;
-    border: 1px solid rgba(255,255,255,.25);
-    background: rgba(0,0,0,.35);
-    backdrop-filter: blur(6px);
-    font-size: 18px;
-    line-height: 36px;
-    text-align: center;
-    cursor: pointer;
-    z-index: 9999;
-    color: var(--fg, #fff);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .btn-reload-mobile:active { transform: scale(0.96); }
+  /* performance bar scale (applied via JS) */
+  .perfbar--mobile-scale { transform: scale(0.86); transform-origin: left top; }
+  /* vertical actions small pills */
+  .floating-mobile-action { font-size: 14px !important; padding: 8px 10px !important; border-radius: 12px !important; }
+  /* reload baseline at bottom */
+  .btn-reload-mobile { bottom: calc(var(--safe-bottom, 0px) + 6px) !important; }
 }
 </style>
 </head>
@@ -1460,52 +1444,82 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 </script>
 <script>
-/* --- Mobile/Page: lock zoom & page scroll; allow internal scroll in [data-scrollable] --- */
+/* --- Page: lock zoom & outer scroll; allow internal [data-scrollable] scroll --- */
 (() => {
   document.querySelectorAll('.modal-body').forEach(el => el.setAttribute('data-scrollable',''));
   ['gesturestart','gesturechange','gestureend'].forEach(evt => {
     document.addEventListener(evt, e => e.preventDefault(), { passive: false });
   });
   window.addEventListener('wheel', (e) => {
-    if (e.ctrlKey || !e.target.closest('[data-scrollable]')) {
-      e.preventDefault();
-    }
+    if (e.ctrlKey || !e.target.closest('[data-scrollable]')) e.preventDefault();
   }, { passive: false });
 })();
 </script>
 <script>
-/* ==== Mobile-only tweaks: reload button, "Per:" label, stack right buttons ==== */
+/* ==== Mobile refine script v5 (layout + labels) ==== */
 (function(){
   const isMobile = window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
   if (!isMobile) return;
 
-  // Mini reload button near bottom-right (beside existing Info)
-  if (!document.querySelector('.btn-reload-mobile')) {
-    const reloadBtn = document.createElement('button');
-    reloadBtn.className = 'btn-reload-mobile';
-    reloadBtn.setAttribute('aria-label', 'Reload');
-    reloadBtn.textContent = '↻';
-    reloadBtn.addEventListener('click', () => location.reload());
-    document.body.appendChild(reloadBtn);
-  }
+  // Ensure a mini reload button exists (we'll reposition it later)
+  (function ensureReload(){
+    if (document.querySelector('.btn-reload-mobile')) return;
+    const b = document.createElement('button');
+    b.className = 'btn-reload-mobile';
+    b.setAttribute('aria-label','Reload');
+    b.textContent = '↻';
+    b.style.position = 'fixed';
+    b.style.width = '36px'; b.style.height = '36px';
+    b.style.borderRadius = '9999px';
+    b.style.border = '1px solid rgba(255,255,255,.25)';
+    b.style.background = 'rgba(0,0,0,.35)';
+    b.style.backdropFilter = 'blur(6px)';
+    b.style.fontSize = '18px';
+    b.style.lineHeight = '36px';
+    b.style.textAlign = 'center';
+    b.style.color = 'var(--fg,#fff)';
+    b.style.zIndex = '9999';
+    b.style.userSelect = 'none';
+    b.addEventListener('click', () => location.reload());
+    document.body.appendChild(b);
+  })();
 
-  // Replace "Performance:" -> "Per:" on mobile only (text nodes & common label wrappers)
+  // Replace "Performance:" -> "Per:" (mobile only)
   try {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
     const nodes = [];
     while (walker.nextNode()) {
-      const n = walker.currentNode;
-      if (!n.parentElement) continue;
-      const t = (n.nodeValue || "");
+      const n = walker.currentNode, t = (n.nodeValue || '');
       if (/^\s*Performance\s*:?\s*$/.test(t)) nodes.push(n);
     }
-    nodes.forEach(n => n.nodeValue = "Per:");
+    nodes.forEach(n => n.nodeValue = 'Per:');
     const candidates = Array.from(document.querySelectorAll('[data-label="performance"], .perf-label, label, .label, .btn, .chip'))
       .filter(el => /^Performance\s*:?\s*$/i.test(el.textContent.trim()));
     candidates.forEach(el => el.textContent = 'Per:');
   } catch(e){}
 
-  // Stack "Bestenliste" & "Neustart" vertically on the far right (mobile only)
+  // Find performance bar container and scale it a bit so it fits under the header
+  function findPerfBar(){
+    const nodes = Array.from(document.querySelectorAll('*')).filter(el => {
+      const t = (el.textContent || '').replace(/\s+/g,' ').trim();
+      return /Niedrig/i.test(t) && /Mittel/i.test(t) && /Hoch/i.test(t) && /Ultra/i.test(t);
+    });
+    let pick = null, score = 1e15;
+    nodes.forEach(el => {
+      const r = el.getBoundingClientRect();
+      const area = Math.max(1, r.width*r.height);
+      const s = area + el.children.length * 2000;
+      if (s < score) { score = s; pick = el; }
+    });
+    return pick;
+  }
+  const perfBar = findPerfBar();
+  if (perfBar) {
+    perfBar.classList.add('perfbar--mobile-scale');
+    perfBar.style.marginTop = '4px';
+  }
+
+  // Place Bestenliste & Neustart top-right directly below perf bar (not mid-game)
   function pickByText(txt) {
     const els = Array.from(document.querySelectorAll('button, a, .btn, [role="button"]'));
     return els.find(el => el.textContent.trim().toLowerCase() === txt.toLowerCase());
@@ -1517,29 +1531,40 @@ document.addEventListener('DOMContentLoaded', function(){
     document.querySelector('[data-action="restart"], [data-role="restart"]') ||
     pickByText('Neustart');
 
-  const getTopOffset = () => {
-    const hdr = document.querySelector('header, .header, .topbar');
-    const h = hdr ? Math.max(56, hdr.getBoundingClientRect().height) : 56;
-    return Math.round(h) + 12;
-  };
-  const topOffset = getTopOffset();
+  let anchorTop = 0;
+  const header = document.querySelector('header, .header, .topbar');
+  if (perfBar) {
+    anchorTop = Math.round(perfBar.getBoundingClientRect().bottom) + 6;
+  } else if (header) {
+    anchorTop = Math.round(header.getBoundingClientRect().bottom) + 6;
+  } else {
+    anchorTop = 80;
+  }
+  function floatAt(btn, y){
+    if (!btn) return;
+    btn.classList.add('floating-mobile-action');
+    Object.assign(btn.style, { position:'fixed', right:'8px', top:y+'px', zIndex:'9999' });
+  }
+  floatAt(leaderboardBtn, anchorTop);
+  floatAt(restartBtn, anchorTop + 42);
 
-  if (leaderboardBtn) {
-    Object.assign(leaderboardBtn.style, {
-      position: 'fixed',
-      right: '12px',
-      top: `${topOffset}px`,
-      zIndex: '9999'
-    });
+  // Place reload between Info and FPS at the bottom baseline
+  function placeReload(){
+    const infoEl = Array.from(document.querySelectorAll('*')).find(el => el.textContent && el.textContent.trim() === 'Info');
+    const fpsEl  = Array.from(document.querySelectorAll('*')).find(el => /^\s*FPS\s*:/.test(el.textContent || ''));
+    const rb = document.querySelector('.btn-reload-mobile');
+    if (!rb || !infoEl || !fpsEl) return;
+    rb.style.bottom = 'calc(var(--safe-bottom, 0px) + 6px)';
+    const ir = infoEl.getBoundingClientRect();
+    const fr = fpsEl.getBoundingClientRect();
+    const centerX = (ir.right + fr.left) / 2;
+    const width = rb.getBoundingClientRect().width || 36;
+    const left = Math.max(8, centerX - width/2);
+    rb.style.left = left + 'px';
+    rb.style.right = 'auto';
   }
-  if (restartBtn) {
-    Object.assign(restartBtn.style, {
-      position: 'fixed',
-      right: '12px',
-      top: `${topOffset + 44}px`,
-      zIndex: '9999'
-    });
-  }
+  placeReload();
+  ['resize','orientationchange'].forEach(evt => window.addEventListener(evt, placeReload, {passive:true}));
 })();
 </script>
 </body>
