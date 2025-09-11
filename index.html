@@ -177,6 +177,57 @@ body { position: fixed !important; overflow: hidden !important; inset: 0; touch-
   .btn-reload-mobile { bottom: calc(var(--safe-bottom, 0px) + 6px) !important; }
 }
 </style>
+<style>
+/* ==== Mobile refinement v6 (safe header + mini actions) ==== */
+@media (max-width: 768px), (pointer: coarse) {
+  header, .header, .topbar {
+    min-height: 72px !important;   /* slightly thicker */
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    position: relative;
+    z-index: 1000;
+  }
+  .header-right-stack {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 6px;
+  }
+  .mini-top-btn {
+    font-size: 12px;
+    line-height: 1;
+    padding: 8px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.25);
+    backdrop-filter: blur(6px);
+    color: var(--fg, #fff);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mini-top-btn:active { transform: scale(0.97); }
+  /* Ensure any previous floating styles don't interfere */
+  .floating-mobile-action {
+    position: static !important;
+    top: auto !important; right: auto !important; left: auto !important;
+    z-index: auto !important;
+  }
+  /* Keep bottom HUD really at the bottom */
+  .hud-bottom-fixed {
+    position: fixed !important;
+    left: 0; right: 0;
+    bottom: calc(var(--safe-bottom, 0px) + 4px) !important;
+    z-index: 900;
+  }
+  .btn-reload-mobile {
+    position: fixed !important;
+    bottom: calc(var(--safe-bottom, 0px) + 4px) !important;
+    z-index: 9999;
+  }
+}
+</style>
 </head>
 <body class="high">
 <div id="app">
@@ -1565,6 +1616,132 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   placeReload();
   ['resize','orientationchange'].forEach(evt => window.addEventListener(evt, placeReload, {passive:true}));
+})();
+</script>
+<script>
+/* ==== Mobile refine v6 script ==== */
+(function(){
+  const isMobile = window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
+  if (!isMobile) return;
+
+  function pickByText(txt) {
+    const els = Array.from(document.querySelectorAll('button, a, .btn, [role="button"], .chip, .badge, span, div'));
+    return els.find(el => el.textContent && el.textContent.trim().toLowerCase() === txt.toLowerCase());
+  }
+
+  // 1) Ensure header and add a right-side container for mini buttons
+  const header = document.querySelector('header, .header, .topbar');
+  if (header) {
+    let right = header.querySelector('.header-right-stack');
+    if (!right) {
+      right = document.createElement('div');
+      right.className = 'header-right-stack';
+      header.appendChild(right);
+    }
+
+    // Grab original large buttons
+    const lbOrig =
+      document.querySelector('[data-action="leaderboard"], [data-role="leaderboard"]') ||
+      pickByText('Bestenliste');
+    const rsOrig =
+      document.querySelector('[data-action="restart"], [data-role="restart"]') ||
+      pickByText('Neustart');
+
+    function makeMini(original, label){
+      if (!original) return null;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mini-top-btn';
+      b.textContent = label;
+      b.addEventListener('click', (e) => { e.preventDefault(); original.click(); });
+      return b;
+    }
+
+    const lbMini = makeMini(lbOrig, 'Bestenliste');
+    const rsMini = makeMini(rsOrig, 'Neustart');
+    if (lbMini) right.appendChild(lbMini);
+    if (rsMini) right.appendChild(rsMini);
+
+    // Hide the big versions to avoid overlaying content
+    if (lbOrig) { lbOrig.style.display = 'none'; lbOrig.classList.add('floating-mobile-action'); }
+    if (rsOrig) { rsOrig.style.display = 'none'; rsOrig.classList.add('floating-mobile-action'); }
+  }
+
+  // 2) Keep bottom HUD (Konto/Info/FPS) fixed flush to bottom
+  (function fixBottomHUD(){
+    // Try to find Info + FPS; then pin their common parent
+    const infoEl = pickByText('Info');
+    const fpsEl  = Array.from(document.querySelectorAll('*')).find(el => /^\s*FPS\s*:/.test(el.textContent || ''));
+    function ancestors(el){ const arr=[]; while(el){ arr.push(el); el = el.parentElement; } return arr; }
+    let hud = null;
+    if (infoEl && fpsEl) {
+      const ai = ancestors(infoEl);
+      const af = ancestors(fpsEl);
+      hud = ai.find(n => af.includes(n));
+    }
+    if (hud) {
+      hud.classList.add('hud-bottom-fixed');
+    } else {
+      // Fallback: position individually so they sit on the baseline
+      if (infoEl) {
+        Object.assign(infoEl.style, {position:'fixed', left:'50%', transform:'translateX(-50%)', bottom:'calc(var(--safe-bottom,0px) + 4px)', zIndex:'901'});
+      }
+      if (fpsEl) {
+        Object.assign(fpsEl.style, {position:'fixed', right:'8px', bottom:'calc(var(--safe-bottom,0px) + 4px)', zIndex:'901'});
+      }
+    }
+  })();
+
+  // 3) Reload button exactly between Info and FPS on the same bottom baseline
+  (function placeReload(){
+    let rb = document.querySelector('.btn-reload-mobile');
+    if (!rb) {
+      rb = document.createElement('button');
+      rb.className = 'btn-reload-mobile';
+      rb.setAttribute('aria-label', 'Reload');
+      rb.textContent = '↻';
+      rb.style.width = '36px'; rb.style.height = '36px';
+      rb.style.borderRadius = '9999px';
+      rb.style.border = '1px solid rgba(255,255,255,.18)';
+      rb.style.background = 'rgba(0,0,0,.25)';
+      rb.style.backdropFilter = 'blur(6px)';
+      rb.style.fontSize = '18px';
+      rb.style.lineHeight = '36px';
+      rb.style.textAlign = 'center';
+      rb.style.color = 'var(--fg,#fff)';
+      rb.style.userSelect = 'none';
+      rb.addEventListener('click', () => location.reload());
+      document.body.appendChild(rb);
+    }
+    function positionRB(){
+      const infoEl = pickByText('Info');
+      const fpsEl  = Array.from(document.querySelectorAll('*')).find(el => /^\s*FPS\s*:/.test(el.textContent || ''));
+      if (!infoEl || !fpsEl) return;
+      const ir = infoEl.getBoundingClientRect();
+      const fr = fpsEl.getBoundingClientRect();
+      const cx = (ir.right + fr.left) / 2;
+      const w  = rb.getBoundingClientRect().width || 36;
+      rb.style.left = Math.max(8, cx - w/2) + 'px';
+      rb.style.right = 'auto';
+      rb.style.bottom = 'calc(var(--safe-bottom, 0px) + 4px)';
+    }
+    positionRB();
+    ['resize','orientationchange'].forEach(evt => window.addEventListener(evt, positionRB, {passive:true}));
+  })();
+
+  // 4) On mobile: label "Performance:" -> "Per:" (without touching theme behavior)
+  try {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const n = walker.currentNode, t = (n.nodeValue || '');
+      if (/^\s*Performance\s*:?\s*$/.test(t)) nodes.push(n);
+    }
+    nodes.forEach(n => n.nodeValue = 'Per:');
+    const candidates = Array.from(document.querySelectorAll('[data-label="performance"], .perf-label, label, .label'))
+      .filter(el => /^Performance\s*:?\s*$/i.test(el.textContent.trim()));
+    candidates.forEach(el => el.textContent = 'Per:');
+  } catch(e){}
 })();
 </script>
 </body>
