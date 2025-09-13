@@ -1025,17 +1025,20 @@ function renderShop(filter=""){
       if(btn.disabled || btn.dataset.busy === "1") return;
       if(owned.has(em)) return; // secondary guard
 
+      // Require login to persist purchases
+      if(!user){ alert('Bitte zuerst einloggen, um Emojis zu kaufen.'); return; }
+
       // Price check
-      if(points < 10000){
-        alert("Nicht genug Punkte.");
-        return;
-      }
+      if(points < 10000){ alert('Nicht genug Punkte.'); return; }
 
       // Lock and optimistic UI
       btn.dataset.busy = "1";
       btn.disabled = true;
       btn.textContent = em + " ✓";
 
+      // Snapshot for rollback
+      const prevOwned = ownedEmojis.slice();
+      const prevPoints = points;
       try{
         // Update local state with de-duplication
         ownedEmojis.push(em);
@@ -1053,23 +1056,37 @@ function renderShop(filter=""){
             payload.ownedEmojis = ownedEmojis;
           }
           await fb.setDoc(docRef, payload, { merge: true });
+          // Verify persisted state; if not, force-write full array
+          try{
+            const snap = await fb.getDoc(docRef);
+            const data = snap && snap.data && snap.data();
+            const serverOwned = (data && Array.isArray(data.ownedEmojis)) ? data.ownedEmojis : null;
+            if(!serverOwned || serverOwned.indexOf(em) === -1){
+              await fb.setDoc(docRef, { ownedEmojis, points }, { merge: true });
+            }
+          }catch(_e){ /* ignore verify errors */ }
         }else{
           // Local fallback
           const users = localUsers();
-          if(users && users[user.name]){
+          if(users && user && users[user.name]){
             const cur = users[user.name].ownedEmojis || [];
             const merged = Array.from(new Set(cur.concat([em])));
             users[user.name].ownedEmojis = merged;
             users[user.name].points = points;
             saveLocalUsers(users);
+          } else {
+            throw new Error('Kein Benutzerkontext verfügbar');
           }
         }
       }catch(e){
-        // Rollback UI on error
+        // Rollback UI + state on error
         console.error(e);
+        ownedEmojis = prevOwned;
+        points = prevPoints; updatePoints();
         btn.disabled = false;
         btn.dataset.busy = "";
         btn.textContent = em;
+        alert('Kauf konnte nicht gespeichert werden. Bitte später erneut versuchen.');
         return;
       }
 
