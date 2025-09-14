@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Emoji Match 3 — JK Games</title>
 <style>
   :root{
@@ -189,8 +190,80 @@ body.modal-open { overscroll-behavior-y: none; }
 
 /* v18 chip style */ 
 .chip{ display:inline-flex; gap:.4rem; align-items:center; padding:.2rem .6rem; border-radius:999px; background:#2a2146; color:#e8e6ff; font-size:.85rem; border:1px solid #3a2c63; }
+
+  /* Quests progress bar */
+  .qprog{ width:100%; height:10px; border-radius:999px; background:#1d1334; overflow:hidden; border:1px solid #3a2c63; }
+  .qprog > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg, #7c5cff, #00d1ff); }
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
+/* ==== Mobile refinement v5 ==== */
+@media (max-width: 768px), (pointer: coarse) {
+  /* header slightly thicker so perf bar fits */
+  header, .header, .topbar {
+    min-height: 72px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+  /* performance bar scale (applied via JS) */
+  .perfbar--mobile-scale { transform: scale(0.86); transform-origin: left top; }
+  /* vertical actions small pills */
+  .floating-mobile-action { font-size: 14px !important; padding: 8px 10px !important; border-radius: 12px !important; }
+  /* reload baseline at bottom */
+  .btn-reload-mobile { bottom: calc(var(--safe-bottom, 0px) + 6px) !important; }
+}
+</style>
+<style>
+/* ==== Mobile refinement v6 (safe header + mini actions) ==== */
+@media (max-width: 768px), (pointer: coarse) {
+  header, .header, .topbar {
+    min-height: 72px !important;   /* slightly thicker */
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    position: relative;
+    z-index: 1000;
+  }
+  .header-right-stack {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 6px;
+  }
+  .mini-top-btn {
+    font-size: 12px;
+    line-height: 1;
+    padding: 8px 10px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.25);
+    backdrop-filter: blur(6px);
+    color: var(--fg, #fff);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mini-top-btn:active { transform: scale(0.97); }
+  /* Ensure any previous floating styles don't interfere */
+  .floating-mobile-action {
+    position: static !important;
+    top: auto !important; right: auto !important; left: auto !important;
+    z-index: auto !important;
+  }
+  /* Keep bottom HUD really at the bottom */
+  .hud-bottom-fixed {
+    position: fixed !important;
+    left: 0; right: 0;
+    bottom: calc(var(--safe-bottom, 0px) + 4px) !important;
+    z-index: 900;
+  }
+  .btn-reload-mobile {
+    position: fixed !important;
+    bottom: calc(var(--safe-bottom, 0px) + 4px) !important;
+    z-index: 9999;
+  }
+}
+</style>
+<style>
 /* ==== Mobile refinement v7 (match perf-chip look, vertical stack, no reload) ==== */
 @media (max-width: 768px), (pointer: coarse) {
   header, .header, .topbar {
@@ -279,12 +352,13 @@ body.modal-open { overscroll-behavior-y: none; }
 
   <footer>
     <button id="btnAccount" class="round" title="Konto / Inventar / Shop">👤</button>
+    <button id="btnQuests" class="round" title="Tagesziele / Quests">🎯</button>
     <button id="btnInfo" class="btn small">Info</button>
     <div id="fpsBox" class="badge">FPS: 60</div>
   </footer>
 </div>
 
-<div id="err"></div>
+<div id="err">
 <!-- Admin Login -->
 <dialog id="dlgAdminLogin">
   <div class="modal-header">
@@ -324,6 +398,26 @@ body.modal-open { overscroll-behavior-y: none; }
     <div id="adminList"></div>
   </div>
 </dialog>
+</div>
+
+
+<!-- Quests / Tagesziele -->
+<dialog id="dlgQuests">
+  <div class="modal-header">
+    <div style="display:flex; align-items:center; gap:.5rem;">
+      <div style="font-weight:800;">Tagesziele</div>
+      <div class="chip">täglich</div>
+    </div>
+    <button class="btn small" onclick="document.getElementById('dlgQuests').close()">Schließen</button>
+  </div>
+  <div class="modal-body" data-scrollable>
+    <div id="questsActiveBuffs" class="help" style="margin-bottom:.6rem;"></div>
+    <div id="questsList" class="list"></div>
+    <div class="help" style="margin-top:.6rem;">Neue Ziele jeden Tag. Belohnungen: zeitweise doppelte Punkte pro Feld, extra € pro Feld oder Sofort-Guthaben.</div>
+  </div>
+</dialog>
+
+
 <!-- Info -->
 <dialog id="dlgInfo">
   <div class="modal-header">
@@ -596,7 +690,125 @@ const AudioSys = (function(){
   }
 })();
 
+
+/* ---------- Quests / Tagesziele (daily) ---------- */
+const QUESTS_KEY = "EM3_QUESTS_STATE";
+function todayKey(){
+  const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function baseQuestSet(){
+  return [
+    { id:"reach10k",  text:"Erreiche 10.000 Score in einer Runde", type:"score", goal:10000, progress:0, done:false, claimed:false, reward:{ kind:"buffScore", mult:2, minutes:3 } },
+    { id:"fiveFours", text:"Mache 5 Vierer-Kombos (Reihen mit 4)", type:"fourCombos", goal:5, progress:0, done:false, claimed:false, reward:{ kind:"buffMoneyPerTile", amount:5, minutes:5 } },
+    { id:"fivePlus",  text:"Erzeuge eine 5er+ Kombo", type:"fivePlus", goal:1, progress:0, done:false, claimed:false, reward:{ kind:"instantMoney", amount:10000 } }
+  ];
+}
+function loadQuests(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem(QUESTS_KEY)||"null"); }catch{}
+  if(!s || s.date !== todayKey()){ s = { date: todayKey(), quests: baseQuestSet(), buffs: {} }; }
+  // normalize buffs
+  s.buffs = s.buffs || {};
+  if(typeof s.buffs.scoreUntil !== "number") s.buffs.scoreUntil = 0; // timestamp ms
+  if(typeof s.buffs.scoreMult !== "number") s.buffs.scoreMult = 1;
+  if(typeof s.buffs.moneyUntil !== "number") s.buffs.moneyUntil = 0;
+  if(typeof s.buffs.moneyPerTile !== "number") s.buffs.moneyPerTile = 0;
+  return s;
+}
+function saveQuests(){ try{ localStorage.setItem(QUESTS_KEY, JSON.stringify(questsState)); }catch{} }
+let questsState = loadQuests();
+
+function getScorePerTile(){
+  const BASE = 10;
+  if(Date.now() < questsState.buffs.scoreUntil){ return Math.max(BASE, Math.floor(BASE * questsState.buffs.scoreMult)); }
+  return BASE;
+}
+function getMoneyPerTile(){
+  if(Date.now() < questsState.buffs.moneyUntil){ return questsState.buffs.moneyPerTile|0; }
+  return 0;
+}
+function applyReward(rw){
+  if(!rw) return;
+  if(rw.kind === "buffScore"){
+    questsState.buffs.scoreMult = rw.mult||2;
+    questsState.buffs.scoreUntil = Date.now() + (rw.minutes||3)*60*1000;
+    showToast(`⚡ Doppelte Punkte für ${rw.minutes||3} Min aktiv!`);
+  } else if(rw.kind === "buffMoneyPerTile"){
+    questsState.buffs.moneyPerTile = rw.amount||5;
+    questsState.buffs.moneyUntil = Date.now() + (rw.minutes||5)*60*1000;
+    showToast(`💸 +${rw.amount||5}€ pro Feld für ${rw.minutes||5} Min!`);
+  } else if(rw.kind === "instantMoney"){
+    const add = rw.amount||5000; points += add; updatePoints(); showToast(`+${add}€ Kontoguthaben`);
+  }
+  saveQuests();
+  renderQuests();
+}
+function markDoneIf(q, cond){ if(!q.done && cond){ q.done=true; saveQuests(); } }
+function questOnScoreChanged(currScore){
+  const qs = questsState.quests;
+  const q1 = qs.find(q=>q.type==="score"); if(q1){ q1.progress = Math.max(q1.progress||0, currScore); markDoneIf(q1, q1.progress>=q1.goal); }
+  saveQuests();
+}
+function questTrackMatches(matches){
+  let four=0, five=0;
+  for(const m of matches){ if(m.len===4) four++; if(m.len>=5) five++; }
+  const qs = questsState.quests;
+  const qF = qs.find(q=>q.type==="fourCombos");
+  if(qF && !qF.done){ qF.progress = (qF.progress||0) + four; markDoneIf(qF, qF.progress>=qF.goal); }
+  const q5 = qs.find(q=>q.type==="fivePlus");
+  if(q5 && !q5.done){ q5.progress = (q5.progress||0) + (five>0?1:0); markDoneIf(q5, q5.progress>=q5.goal); }
+  saveQuests();
+}
+function renderQuests(){
+  const list = document.getElementById('questsList'); if(!list) return;
+  list.innerHTML="";
+  for(const q of questsState.quests){
+    const pct = Math.min(100, Math.floor(( (q.progress||0) / q.goal )*100));
+    const row = document.createElement('div'); row.className="row";
+    row.innerHTML = `
+      <div style="flex:1; min-width:0;">
+        <div><b>${q.text}</b></div>
+        <div class="help">${Math.min(q.progress||0,q.goal)} / ${q.goal}</div>
+        <div class="qprog" aria-hidden="true"><i style="width:${pct}%"></i></div>
+      </div>
+      <div style="display:flex; align-items:center; gap:.4rem; margin-left:.5rem;">
+        <div class="chip">${q.done ? (q.claimed ? "Abgeschlossen" : "Fertig!") : "Läuft…"}</div>
+        <button class="btn small ${q.done && !q.claimed ? 'primary' : ''}" ${q.done && !q.claimed ? '' : 'disabled'}>Claim</button>
+      </div>
+    `;
+    const btn = row.querySelector('button');
+    btn.onclick = ()=>{
+      if(q.done && !q.claimed){ q.claimed=true; saveQuests(); applyReward(q.reward); }
+    };
+    list.appendChild(row);
+  }
+  // Active buffs summary
+  const ab = document.getElementById('questsActiveBuffs');
+  function fmt(ms){ const s=Math.max(0, Math.ceil(ms/1000)); const m=Math.floor(s/60), ss=s%60; return `${m}:${String(ss).padStart(2,'0')}`; }
+  const now = Date.now();
+  const lines = [];
+  if(now < questsState.buffs.scoreUntil){ lines.push(`⚡ Doppelte Punkte aktiv — noch ${fmt(questsState.buffs.scoreUntil - now)}`); }
+  if(now < questsState.buffs.moneyUntil){ lines.push(`💸 +${questsState.buffs.moneyPerTile}€ pro Feld — noch ${fmt(questsState.buffs.moneyUntil - now)}`); }
+  ab.textContent = lines.length ? lines.join(" · ") : "Keine aktiven Boni.";
+}
+setInterval(()=>{
+  // keep buffs live, auto-expire UI
+  if(Date.now() > questsState.buffs.scoreUntil && questsState.buffs.scoreMult !== 1){ questsState.buffs.scoreMult = 1; saveQuests(); }
+  if(Date.now() > questsState.buffs.moneyUntil && questsState.buffs.moneyPerTile !== 0){ questsState.buffs.moneyPerTile = 0; saveQuests(); }
+}, 2000);
+
+// Open quests
+document.addEventListener('click', (e)=>{
+  if(e.target && e.target.id === 'btnQuests'){ const dlg=document.getElementById('dlgQuests'); if(dlg){ renderQuests(); dlg.showModal(); } }
+});
+
+
 /* ---------- Game ---------- */
+
+async function resolveLoop(){
+  while(await resolveMatches()){}
+}
+
 /* ---------- Ultra Swipe Animation Helpers ---------- */
 function __getStepPx(){
   const rs = getComputedStyle(document.documentElement);
@@ -674,11 +886,21 @@ function initGrid(){
   counts = {refresh:1, rocket:0, bomb:0, destroy:0};
   threeLines=0; activePower=null; updateCounts();
 }
+
 function renderGrid(){
   boardEl.innerHTML=""; tileEls=[];
-  for(let i=0;i<64;i++){ const el=document.createElement('div'); el.className='tile'; el.textContent=grid[i]; el.dataset.i=i; boardEl.appendChild(el); tileEls[i]=el; }
+  for(let i=0;i<64;i++){
+    const el=document.createElement('div');
+    el.className='tile';
+    el.dataset.i=i;
+    el.textContent = grid[i] || ' ';
+    boardEl.appendChild(el);
+    tileEls[i]=el;
+  }
   bindTiles();
+  try{ if(window.applyTilePalette) applyTilePalette(); }catch(e){}
 }
+
 const indexRC=(r,c)=>r*8+c;
 const rcFromIndex=i=>[Math.floor(i/8), i%8];
 function swap(i1,i2,tentative=false){ const t=grid[i1]; grid[i1]=grid[i2]; grid[i2]=t; if(!tentative){ tileEls[i1].textContent=grid[i1]; tileEls[i2].textContent=grid[i2]; } }
@@ -721,7 +943,7 @@ function showPointsAt(index, amount){
   requestAnimationFrame(tick);
 }
 async function resolveMatches(){
-  const matches=findMatches(); if(!matches.length) return false;
+  const matches=findMatches(); if(!matches.length) return false; questTrackMatches(matches);
   const toClear=new Set(); let threeNow=0;
   for(const m of matches){
     if(m.dir==='h'){ for(let c=0;c<m.len;c++) toClear.add(indexRC(m.r,m.c0+c)); }
@@ -740,8 +962,7 @@ async function resolveMatches(){
   await sleep( perfMode==="low" ? 0 : 280 );
   toClear.forEach(i=> grid[i]=null);
   collapseAndFill();
-  await resolveMatches();
-}
+  await resolveLoop(); }
 
 /* input / gestures — unified Pointer Events with debounce */
 let touchStartIndex=null, swipeBusy=false;
@@ -773,11 +994,11 @@ async function handleSwipe(i,dx,dy){
         counts.refresh --; updateCounts();
         shuffleBoard();
       }
-      setActivePower(null); return;
+      activePower=null; return;
     }
-    if(activePower==='rocket'){ const orient=Math.abs(dx)>Math.abs(dy)?'h':'v'; await useRocket(i,orient); setActivePower(null); return; }
-    if(activePower==='bomb'){ await useBomb(i); setActivePower(null); return; }
-    if(activePower==='destroy'){ await useDestroy(grid[i]); setActivePower(null); return; }
+    if(activePower==='rocket'){ const orient=Math.abs(dx)>Math.abs(dy)?'h':'v'; await useRocket(i,orient); activePower=null; return; }
+    if(activePower==='bomb'){ await useBomb(i); activePower=null; return; }
+    if(activePower==='destroy'){ await useDestroy(grid[i]); activePower=null; return; }
   } else {
     const dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
     const [r,c]=rcFromIndex(i); let j=null;
@@ -999,176 +1220,38 @@ document.getElementById('shopSearch').addEventListener('input', (e)=> renderShop
 function renderShop(filter=""){
   const grid = document.getElementById('shopGrid'); grid.innerHTML="";
   const owned = new Set(ownedEmojis);
-  const list = SHOP_EMOJIS
-    .filter(e => !DEFAULT_EMOJIS.includes(e) && (!filter || e.includes(filter)))
-    .slice(0,200);
-
-  list.forEach(em => {
-    const btn = document.createElement('button');
-    btn.className = "btn";
-    btn.style.fontSize = "1.4rem";
-    btn.textContent = em;
-
-    // Disable when already owned
-    const already = owned.has(em);
-    if(already){
-      btn.disabled = true;
-      btn.textContent = em + " ✓";
-      btn.title = "Bereits gekauft";
-    }else{
-      btn.title = "10.000 Punkte";
-    }
-
-    // Hardened click handler
-    btn.addEventListener('click', async () => {
-      // Immediate guard against double taps
-      if(btn.disabled || btn.dataset.busy === "1") return;
-      if(owned.has(em)) return; // secondary guard
-
-      // Require login to persist purchases
-      if(!user){ alert('Bitte zuerst einloggen, um Emojis zu kaufen.'); return; }
-
-      // Price check
-      if(points < 10000){ alert('Nicht genug Punkte.'); return; }
-
-      // Lock and optimistic UI
-      btn.dataset.busy = "1";
-      btn.disabled = true;
-      btn.textContent = em + " ✓";
-
-      // Snapshot for rollback
-      const prevOwned = ownedEmojis.slice();
-      const prevPoints = points;
-      try{
-        // Update local state with de-duplication
-        ownedEmojis.push(em);
-        ownedEmojis = Array.from(new Set(ownedEmojis));
-        points -= 10000;
-        updatePoints();
-
-        // Persist: prefer atomic arrayUnion if available
-        if(db && user && typeof fb?.setDoc === "function"){
-          const docRef = fb.doc(db, "users", user.name);
-          const payload = { points };
-          if(typeof fb?.arrayUnion === "function"){
-            payload.ownedEmojis = fb.arrayUnion(em);
-          }else{
-            payload.ownedEmojis = ownedEmojis;
-          }
-          await fb.setDoc(docRef, payload, { merge: true });
-          // Verify persisted state; if not, force-write full array
-          try{
-            const snap = await fb.getDoc(docRef);
-            const data = snap && snap.data && snap.data();
-            const serverOwned = (data && Array.isArray(data.ownedEmojis)) ? data.ownedEmojis : null;
-            if(!serverOwned || serverOwned.indexOf(em) === -1){
-              await fb.setDoc(docRef, { ownedEmojis, points }, { merge: true });
-            }
-          }catch(_e){ /* ignore verify errors */ }
-        }else{
-          // Local fallback
-          const users = localUsers();
-          if(users && user && users[user.name]){
-            const cur = users[user.name].ownedEmojis || [];
-            const merged = Array.from(new Set(cur.concat([em])));
-            users[user.name].ownedEmojis = merged;
-            users[user.name].points = points;
-            saveLocalUsers(users);
-          } else {
-            throw new Error('Kein Benutzerkontext verfügbar');
-          }
-        }
-      }catch(e){
-        // Rollback UI + state on error
-        console.error(e);
-        ownedEmojis = prevOwned;
-        points = prevPoints; updatePoints();
-        btn.disabled = false;
-        btn.dataset.busy = "";
-        btn.textContent = em;
-        alert('Kauf konnte nicht gespeichert werden. Bitte später erneut versuchen.');
-        return;
-      }
-
-      // Re-render with fresh 'owned' set
+  const list = SHOP_EMOJIS.filter(e=> !DEFAULT_EMOJIS.includes(e) && (!filter || e.includes(filter))).slice(0,200);
+  list.forEach(em=>{
+    const btn=document.createElement('button'); btn.className="btn"; btn.style.fontSize="1.4rem"; btn.textContent=em;
+    if(owned.has(em)){ btn.disabled=true; btn.textContent=em+" ✓"; } else { btn.title="10.000 Punkte"; }
+    btn.onclick=async()=>{
+      if(points < 10000) return alert("Nicht genug Punkte.");
+      ownedEmojis.push(em); points-=10000; updatePoints();
+      if(db&&user) await fb.setDoc(fb.doc(db,"users",user.name), {ownedEmojis, points}, {merge:true});
+      else { const users=localUsers(); users[user.name].ownedEmojis=ownedEmojis; users[user.name].points=points; saveLocalUsers(users); }
       renderShop(filter);
-    });
-
+    };
     grid.appendChild(btn);
   });
-
 }
 document.getElementById('btnCustomize').onclick = ()=>{ document.getElementById('dlgCustom').showModal(); renderCustomize(); };
-
-
 function renderCustomize(){
-  const box = document.getElementById('customGrid');
-  if(!box) return;
-  box.innerHTML = "";
-  // Combine defaults + owned, de-dup (defaults first)
-  const seen = new Set();
-  const pool = [];
-  (DEFAULT_EMOJIS || []).forEach(e=>{ if(!seen.has(e)){ seen.add(e); pool.push(e); } });
-  (ownedEmojis || []).forEach(e=>{ if(!seen.has(e)){ seen.add(e); pool.push(e); } });
-
-  // Current selection
-  let sel = new Set(Array.isArray(customEmojis) ? customEmojis : (DEFAULT_EMOJIS || []));
-
-  pool.forEach(em => {
-    const btn = document.createElement('button');
-    btn.className = "btn";
-    btn.style.fontSize = "1.4rem";
-    btn.textContent = em;
-    btn.setAttribute('aria-pressed', sel.has(em) ? 'true' : 'false');
-    btn.classList.toggle('primary', sel.has(em));
-    btn.addEventListener('click', () => {
-      if(sel.has(em)){
-        sel.delete(em);
-        btn.classList.remove('primary');
-        btn.setAttribute('aria-pressed','false');
-        if(window.showToast) showToast('Emoji entfernt: ' + em);
-      } else {
-        if(sel.size >= 8){
-          if(window.showToast) showToast('Maximal 8 Emojis auswählbar');
-          return;
-        }
-        sel.add(em);
-        btn.classList.add('primary');
-        btn.setAttribute('aria-pressed','true');
-        if(window.showToast) showToast('Emoji platziert: ' + em);
-      }
-    });
+  const box = document.getElementById('customGrid'); box.innerHTML="";
+  const pool = DEFAULT_EMOJIS.concat(ownedEmojis);
+  let sel = new Set(customEmojis);
+  pool.forEach(em=>{
+    const btn=document.createElement('button'); btn.className="btn"; btn.style.fontSize="1.4rem"; btn.textContent=em; btn.classList.toggle('primary', sel.has(em));
+    btn.onclick=()=>{ if(sel.has(em)){ sel.delete(em); } else if(sel.size<8){ sel.add(em); } btn.classList.toggle('primary', sel.has(em)); };
     box.appendChild(btn);
   });
-
-  const save = document.getElementById('btnSaveCustom');
-  if(save){
-    save.onclick = async () => {
-      if(sel.size !== 8){
-        alert("Bitte genau 8 Emojis auswählen.");
-        return;
-      }
-      customEmojis = Array.from(sel);
-      try{
-        if(db && user){
-          await fb.setDoc(fb.doc(db,"users",user.name), {customEmojis}, {merge:true});
-        } else {
-          const users = localUsers();
-          if(users && users[user.name]){
-            users[user.name].customEmojis = customEmojis;
-            saveLocalUsers(users);
-          }
-        }
-      }catch(e){ console.error(e); }
-      if(window.showToast) showToast('Emoji‑Set gespeichert');
-      const dlg = document.getElementById('dlgCustom');
-      if(dlg && dlg.close) dlg.close();
-      try{ initGrid(); }catch(e){}
-    };
-  }
+  document.getElementById('btnSaveCustom').onclick = async ()=>{
+    if(sel.size!==8) return alert("Bitte genau 8 Emojis auswählen.");
+    customEmojis = Array.from(sel);
+    if(db&&user) await fb.setDoc(fb.doc(db,"users",user.name), {customEmojis}, {merge:true});
+    else { const users=localUsers(); users[user.name].customEmojis=customEmojis; saveLocalUsers(users); }
+    document.getElementById('dlgCustom').close(); initGrid();
+  };
 }
-
-
 
 /* ---------- Leaderboard ---------- */
 async function saveBest(){
@@ -1184,96 +1267,28 @@ async function saveBest(){
 async function openTop(){
   const dlg=document.getElementById('dlgTop'); dlg.showModal();
   const list=document.getElementById('topList'); list.innerHTML="";
-  // We build a combined leaderboard based on the higher of (bestScore, points),
-  // so that new accounts with >0 points appear as well.
   if(db){
-    // Fetch leaderboard docs (bestScore-based)
-    const qBest = fb.query(fb.collection(db,"leaderboard"), fb.orderBy("score","desc"), fb.limit(15));
-    const bestSnap = await fb.getDocs(qBest);
-    const byUser = new Map();
-    bestSnap.forEach(s => {
-      const d = s.data();
-      if(!d || !d.user) return;
-      byUser.set(d.user, { user: d.user, score: Number(d.score||0), trophy: d.trophy||"" });
-    });
-
-    // Fetch top users by points>0
-    try{
-      const qPts = fb.query(
-        fb.collection(db,"users"),
-        fb.where("points", ">", 0),
-        fb.orderBy("points","desc"),
-        fb.limit(15)
-      );
-      const ptsSnap = await fb.getDocs(qPts);
-      ptsSnap.forEach(s => {
-        const d = s.data(); if(!d || !d.name) return;
-        const u = d.name;
-        const pts = Number(d.points||0);
-        const cur = byUser.get(u);
-        if(cur){
-          // upgrade score if points are higher
-          if(pts > cur.score){
-            const trophyArr = (typeof trophiesFromPoints === 'function') ? trophiesFromPoints(pts) : [];
-            byUser.set(u, { user: u, score: pts, trophy: (trophyArr && trophyArr.length) ? trophyArr[trophyArr.length-1] : (d.trophy||cur.trophy||"") });
-          }
-        } else {
-          const trophyArr = (typeof trophiesFromPoints === 'function') ? trophiesFromPoints(pts) : [];
-          byUser.set(u, { user: u, score: pts, trophy: (trophyArr && trophyArr.length) ? trophyArr[trophyArr.length-1] : (d.trophy||"") });
-        }
-      });
-    }catch(e){
-      // If query requires an index or fails, we still show the bestSnap data
-      console.warn("points query fallback:", e);
-    }
-
-    // Build array and sort
-    const arr = Array.from(byUser.values()).sort((a,b)=> b.score - a.score);
-    const top10 = arr.slice(0,10);
-
+    const q = fb.query(fb.collection(db,"leaderboard"), fb.orderBy("score","desc"), fb.limit(10));
+    const topSnap = await fb.getDocs(q);
     let rank=1, inTop=false;
-    top10.forEach(d => {
-      const row=document.createElement('div'); row.className='row';
+    topSnap.forEach(s=>{
+      const d=s.data(); const row=document.createElement('div'); row.className='row';
       row.innerHTML = `<div><b>${rank}.</b> ${d.trophy||""} ${d.user}</div><div><b>${d.score}</b></div>`;
-      list.appendChild(row);
-      if(user && d.user===user.name) inTop=true;
-      rank++;
+      list.appendChild(row); if(user && d.user===user.name) inTop=true; rank++;
     });
-
-    // If current user not in Top10, append their rank based on combined array
     if(user && !inTop){
-      const meIdx = arr.findIndex(x => x.user===user.name);
-      const myScore = Math.max(Number(bestScore||0), Number(points||0)||0);
-      const myTrophy = (typeof trophiesFromPoints === 'function') ? (trophiesFromPoints(Number(points||0)).slice(-1)[0]||"") : (selectedTrophy||"");
+      const q2 = fb.query(fb.collection(db,"leaderboard"), fb.where("score", ">", bestScore));
+      const s2 = await fb.getDocs(q2);
       const row=document.createElement('div'); row.className='row';
-      row.innerHTML = `<div><b>${(meIdx>=0? meIdx+1 : arr.length+1)}.</b> ${myTrophy} ${user.name}</div><div><b>${myScore}</b></div>`;
+      row.innerHTML = `<div><b>${s2.size+1}.</b> ${selectedTrophy||""} ${user.name}</div><div><b>${bestScore}</b></div>`;
       list.appendChild(row);
     }
   } else {
-    // Local fallback: merge bestScore with points and include users with points>0
-    const users = localUsers();
-    const arr = Object.entries(users||{}).map(([name,d]) => {
-      const bs = Number(d.bestScore||0);
-      const pts = Number(d.points||0);
-      return { user:name, score: Math.max(bs, pts), points: pts };
-    }).filter(x => x.score>0 || x.points>0)
-      .sort((a,b)=> b.score - a.score);
-
-    arr.slice(0,10).forEach((d,idx)=>{
-      const row=document.createElement('div'); row.className='row';
-      row.innerHTML = `<div><b>${idx+1}.</b> ${d.user}</div><div><b>${d.score}</b></div>`;
-      list.appendChild(row);
-    });
-
-    if(user && !arr.slice(0,10).some(d=>d.user===user.name)){
-      const meIdx = arr.findIndex(x => x.user===user.name);
-      const row=document.createElement('div'); row.className='row';
-      const myScore = Math.max(Number(bestScore||0), Number(points||0)||0);
-      row.innerHTML = `<div><b>${(meIdx>=0? meIdx+1 : arr.length+1)}.</b> ${user.name}</div><div><b>${myScore}</b></div>`;
-      list.appendChild(row);
-    }
+    // local ranking
+    const users=localUsers(); const arr=Object.entries(users).map(([name,d])=>({user:name,score:d.bestScore||0})).sort((a,b)=>b.score-a.score);
+    arr.slice(0,10).forEach((d,idx)=>{ const row=document.createElement('div'); row.className='row'; row.innerHTML=`<div><b>${idx+1}.</b> ${d.user}</div><div><b>${d.score}</b></div>`; list.appendChild(row); });
+    if(user && !arr.slice(0,10).some(d=>d.user===user.name)){ const rank=arr.findIndex(d=>d.user===user.name)+1; const row=document.createElement('div'); row.className='row'; row.innerHTML=`<div><b>${rank}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`; list.appendChild(row); }
   }
-
 }
 
 /* ---------- Power-up effects ---------- */
@@ -1285,7 +1300,10 @@ async function useRocket(i,orient){
   if(orient==='h'){ for(let cc=0;cc<8;cc++){ const idx=indexRC(r,cc); tileEls[idx].classList.add('matching'); grid[idx]=null; cleared++; } }
   else{ for(let rr=0;rr<8;rr++){ const idx=indexRC(rr,c); tileEls[idx].classList.add('matching'); grid[idx]=null; cleared++; } }
   await sleep( perfMode==="low"||perfMode==="mid" ? 0 : 260 );
-  collapseAndFill(); await resolveMatches(); const _prevScore2 = score; score += cleared*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore2, score);
+  collapseAndFill(); const _prevScore2 = score; score += cleared*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore2, score);
+
+  try{ await resolveLoop(); }catch{}
+  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
 }
 async function useBomb(i){
   if(counts.bomb<=0) return;
@@ -1293,13 +1311,19 @@ async function useBomb(i){
   const [r0,c0]=rcFromIndex(i); const tiles=[]; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const r=r0+dr,c=c0+dc; if(r>=0&&r<8&&c>=0&&c<8) tiles.push(indexRC(r,c)); }
   tiles.forEach(idx=> tileEls[idx].classList.add('matching')); await sleep(perfMode==="low"||perfMode==="mid"?0:260);
   tiles.forEach(idx=> grid[idx]=null); collapseAndFill(); const _prevScore3 = score; score += tiles.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore3, score);
+
+  try{ await resolveLoop(); }catch{}
+  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
 }
 async function useDestroy(emoji){
   if(counts.destroy<=0) return;
   counts.destroy--; updateCounts(); points+=100; updatePoints();
   const idxs=grid.map((v,idx)=> v===emoji?idx:-1).filter(x=>x>=0); idxs.forEach(idx=> tileEls[idx].classList.add('matching'));
   await sleep(perfMode==="low"||perfMode==="mid"?0:260);
-  idxs.forEach(idx=> grid[idx]=null); collapseAndFill(); await resolveMatches(); const _prevScore4 = score; score += idxs.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore4, score);
+  idxs.forEach(idx=> grid[idx]=null); collapseAndFill(); const _prevScore4 = score; score += idxs.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore4, score);
+
+  try{ await resolveLoop(); }catch{}
+  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
 }
 
 
@@ -1470,85 +1494,20 @@ if(localStorage.getItem("sfx")!=="0"){ $("#btnSound").textContent="AN"; AudioSys
     #yt-live-bg{ position:absolute; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
     #yt-live-bg iframe{ width:120vw; height:120vh; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
   
-/* === Canonical per-mode variables to prevent bleed between modes === */
-body[data-mode="niedrig"] {
-  --bg: #110a1f;
-  --fg: #ffffff;
-  --accent: #7c5cff;
-  --accent-2: #00d1ff;
-  --muted: #b7b3c9;
-  --tile: #3b2a63;
-  --grid-gap: 6px;
-  --tile-size: 48px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+/* Tile palette editor */
+#dlgTilePalette .grid-tiles{
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  margin-top: 8px;
 }
-
-body[data-mode="mittel"] {
-  --bg: #110a1f;
-  --fg: #ffffff;
-  --accent: #7c5cff;
-  --accent-2: #00d1ff;
-  --muted: #b7b3c9;
-  --tile: #3b2a63;
-  --grid-gap: 6px;
-  --tile-size: 48px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+#dlgTilePalette .grid-tiles input[type="color"]{
+  width: 34px; height: 34px; padding: 0; border: none; outline: none;
+  background: none; border-radius: 6px; cursor: pointer;
 }
-
-body[data-mode="hoch"] {
-  --bg: #110a1f;
-  --fg: #ffffff;
-  --accent: #7c5cff;
-  --accent-2: #00d1ff;
-  --muted: #b7b3c9;
-  --tile: #3b2a63;
-  --grid-gap: 6px;
-  --tile-size: 48px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+#dlgTilePalette footer{
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;
 }
-
-body[data-mode="ultra"] {
-  --bg: #110a1f;
-  --fg: #ffffff;
-  --accent: #7c5cff;
-  --accent-2: #00d1ff;
-  --muted: #b7b3c9;
-  --tile: #3b2a63;
-  --grid-gap: 6px;
-  --tile-size: 48px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Active highlight for current mode button (subtle, no layout shift) */
-.btn.xsmall[data-active="true"]{
-  outline: 2px solid var(--accent, currentColor);
-  outline-offset: 2px;
-}
-
-/* Subtle pressed feedback for buttons */
-.btn.pressed{ transform: translateY(1px); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.18); opacity: .95; }
-.btn:active{ transform: translateY(1px); }
-
-/* Toast feedback for actions (subtle) */
-.em3-toast{
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--safe-bottom, 0px) + 16px);
-  transform: translateX(-50%) translateY(8px);
-  background: rgba(20,16,32,.9);
-  border: 1px solid rgba(255,255,255,.12);
-  color: #fff;
-  padding: .5rem .75rem;
-  border-radius: 12px;
-  backdrop-filter: blur(6px);
-  font-size: .95rem;
-  line-height: 1.1;
-  opacity: 0;
-  transition: opacity .18s ease, transform .18s ease;
-  z-index: 10000;
-  pointer-events: none;
-}
-.em3-toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 
 /* --- OFFICIAL v15: Force scroll for 'Hintergründe anpassen' modal --- */
@@ -1663,8 +1622,8 @@ body[data-mode="ultra"] {
       const bg = localStorage.getItem('design_'+mode+'_bg');
       const bd = localStorage.getItem('design_'+mode+'_board');
 
-      if(bg){ root.style.setProperty('--bg', bg); try{ document.body.style.background = bg; }catch(e){} } else { try{ root.style.removeProperty('--bg'); document.body.style.background = ''; }catch(e){} }
-      if(board && bd){ board.style.background = bd; } else if(board){ board.style.background = ''; }
+      if(bg){ root.style.setProperty('--bg', bg); try{ document.body.style.background = bg; }catch(e){} }
+      if(board && bd) board.style.background = bd;
     }
 
     function applyUltra(){
@@ -1804,33 +1763,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
       const btnPerf = document.getElementById('btnPerf');
       if(btnPerf){
-        btnPerf.addEventListener('click', function(){ setTimeout(applyDesignForCurrentMode, 0); 
-      // --- Helpers for mode active highlight + reset buttons ---
-      function updateModeButtonsActive(){
-        const cur = currentPerfMode();
-        const map = { 'Niedrig':'jumpLow', 'Mittel':'jumpMid', 'Hoch':'jumpHigh', 'Ultra':'jumpUltra' };
-        ['jumpLow','jumpMid','jumpHigh','jumpUltra'].forEach(id => {
-          const el = document.getElementById(id);
-          if(el) el.removeAttribute('data-active');
-        });
-        const id = map[cur];
-        const btn = id ? document.getElementById(id) : null;
-        if(btn) btn.setAttribute('data-active','true');
-      }
-
-      // Wire reset buttons to real reset handlers
-      const rLow = document.getElementById('resetLow');   if(rLow)   rLow.addEventListener('click', function(e){ e.preventDefault(); resetColors('low');   updateModeButtonsActive(); });
-      const rMid = document.getElementById('resetMid');   if(rMid)   rMid.addEventListener('click', function(e){ e.preventDefault(); resetColors('mid');   updateModeButtonsActive(); });
-      const rHigh = document.getElementById('resetHigh'); if(rHigh)  rHigh.addEventListener('click', function(e){ e.preventDefault(); resetColors('high');  updateModeButtonsActive(); });
-      const rU = document.getElementById('resetUltra');   if(rU)     rU.addEventListener('click', function(e){ e.preventDefault(); resetUltra();          updateModeButtonsActive(); });
-
-      // Update highlight initially and whenever the perf button cycles
-      updateModeButtonsActive();
-      const _btnPerf = document.getElementById('btnPerf');
-      if(_btnPerf){
-        _btnPerf.addEventListener('click', function(){ setTimeout(updateModeButtonsActive, 0); });
-      }
-});
+        btnPerf.addEventListener('click', function(){ setTimeout(applyDesignForCurrentMode, 0); });
       }
       applyDesignForCurrentMode();
 
@@ -2634,103 +2567,243 @@ document.addEventListener('click', function(ev){
 })();
 </script>
 
-<script>
-
-
-// === Strict mode switching to avoid style bleed ===
-window.applyMode = function(mode){
-  const body = document.body;
-  // normalize aliases
-  const alias = { low:'niedrig', medium:'mittel', high:'hoch', default:'standard', standard:'standard' };
-  if(alias[mode]) mode = alias[mode];
-  if(mode === 'standard'){
-    body.classList.remove('mode-niedrig','mode-mittel','mode-hoch','mode-ultra','perf-niedrig','perf-mittel','perf-hoch','perf-ultra','low','medium','high','ultra');
-    body.removeAttribute('data-mode');
-    try { localStorage.removeItem('em3_mode'); } catch(e){};
-    return;
-  }
-  body.classList.remove('mode-niedrig','mode-mittel','mode-hoch','mode-ultra','perf-niedrig','perf-mittel','perf-hoch','perf-ultra','low','medium','high','ultra');
-  body.setAttribute('data-mode', mode);
-  try { localStorage.setItem('em3_mode', mode); } catch(e){};
-};
-window.resetToStandard = function(){ window.applyMode('standard'); };
-(function(){ try { const s = localStorage.getItem('em3_mode'); if(s) window.applyMode(s); } catch(e){} })();
-</script>
-
 
 <script>
-// === Robust event delegation for duplicate buttons ===
-document.addEventListener('click', function(ev){
-  const t = ev.target.closest('button, a');
-  if(!t) return;
-
-  // Pressed visual feedback (brief)
-  try {
-    t.classList.add('pressed');
-    setTimeout(()=>t.classList.remove('pressed'), 160);
-  }catch(e){}
-
-  const id = (t.getAttribute('id')||'').toLowerCase();
-  const text = (t.textContent||'').trim().toLowerCase();
-
-  // Map for reset buttons
-  if(id==='resetlow' || /standard.*zurücksetzen/.test(text) && t.closest('.section')?.querySelector('#lowBg')){
-    ev.preventDefault(); try{ resetColors('low'); }catch(e){}; try{ applyDesignForCurrentMode(); }catch(e){}; return;
+// === Per-tile palette (low/mid/high) — Ultra remains unchanged ===
+(function(){
+  const alias = { low:'low', niedrig:'low', mittel:'mid', medium:'mid', hoch:'high', high:'high' };
+  function keyFor(mode){
+    let m = (mode||'').toLowerCase();
+    if(alias[m]) m = alias[m];
+    return m;
   }
-  if(id==='resetmid' || /standard.*zurücksetzen/.test(text) && t.closest('.section')?.querySelector('#midBg')){
-    ev.preventDefault(); try{ resetColors('mid'); }catch(e){}; try{ applyDesignForCurrentMode(); }catch(e){}; return;
+  function lsKey(modeKey){
+    return modeKey === 'low' ? 'design_low_tiles'
+         : modeKey === 'mid' ? 'design_mid_tiles'
+         : modeKey === 'high' ? 'design_high_tiles'
+         : null;
   }
-  if(id==='resethigh' || /standard.*zurücksetzen/.test(text) && t.closest('.section')?.querySelector('#highBg,#midBg,#lowBg') && (t.closest('.section')?.querySelector('#highBg'))){
-    ev.preventDefault(); try{ resetColors('high'); }catch(e){}; try{ applyDesignForCurrentMode(); }catch(e){}; return;
+  function getTilePalette(modeKey){
+    const k = lsKey(modeKey);
+    if(!k) return null;
+    try{
+      const raw = localStorage.getItem(k);
+      if(!raw) return null;
+      const arr = JSON.parse(raw);
+      if(Array.isArray(arr) && arr.length) return arr.slice(0,64);
+    }catch(e){}
+    return null;
   }
-  if(id==='resetultra' || (/standard.*zurücksetzen/.test(text) && t.closest('.section')?.querySelector('#ultraLink'))){
-    ev.preventDefault(); try{ resetUltra(); }catch(e){}; try{ applyDesignForCurrentMode(); }catch(e){}; return;
+  function saveTilePalette(modeKey, arr){
+    const k = lsKey(modeKey);
+    if(!k) return;
+    try{ localStorage.setItem(k, JSON.stringify(arr.slice(0,64))); }catch(e){}
   }
-
-  // Global "Standard" reset buttons (various selectors)
-  if(id==='btn-standard' || t.classList.contains('btn-standard') || t.dataset.mode==='standard' || t.dataset.reset==='standard' || t.matches('.standard-reset, [data-action="reset-standard"]')){
-    ev.preventDefault(); try{ window.resetToStandard(); }catch(e){}; return;
+  function clearTilePalette(modeKey){
+    const k = lsKey(modeKey);
+    if(!k) return;
+    try{ localStorage.removeItem(k); }catch(e){}
   }
-}, {passive:false});
-</script>
-<script>
-
-// Safe binding for customize button
-try {
-  const _btnCust = document.getElementById('btnCustomize');
-  if(_btnCust){
-    _btnCust.onclick = () => { 
-      const d = document.getElementById('dlgCustom'); 
-      if(d && d.showModal) d.showModal(); 
-      renderCustomize(); 
+  // Try to detect current mode
+  function currentModeKey(){
+    const dm = (document.body.getAttribute('data-mode')||'').toLowerCase();
+    return keyFor(dm);
+  }
+  // Apply palette to current grid (only for low/mid/high)
+  window.applyTilePalette = function(modeKey){
+    try{
+      const curKey = currentModeKey();
+      if(curKey === 'ultra'){
+        if(window.tileEls && tileEls.length){
+          for(let i=0;i<tileEls.length;i++){
+            const el = tileEls[i];
+            if(el && el.style) el.style.backgroundColor = '';
+          }
+        }
+        return;
+      }
+      const mk = keyFor(modeKey||curKey);
+      if(mk !== 'low' && mk !== 'mid' && mk !== 'high') return;
+      const arr = getTilePalette(mk);
+      if(window.tileEls && tileEls.length){
+        for(let i=0;i<tileEls.length;i++){
+          const el = tileEls[i];
+          if(!el || !el.style) continue;
+          const c = arr && arr[i] || null;
+          if(c){ el.style.backgroundColor = c; }
+          else { el.style.backgroundColor = ''; }
+        }
+      }
+    }catch(e){ console.warn('applyTilePalette failed', e); }
+  };
+  document.addEventListener('DOMContentLoaded', function(){
+    try{ window.applyTilePalette(); }catch(e){}
+  });
+  // Hook initGrid if it exists
+  const _initGrid = window.initGrid;
+  if(typeof _initGrid === 'function'){
+    window.initGrid = function(){
+      const r = _initGrid.apply(this, arguments);
+      try{ window.applyTilePalette(); }catch(e){}
+      return r;
     };
   }
-} catch(e) {}
-
-</script>
-<script>
-
-// Toast helper
-(function(){
-  if(window.showToast) return;
-  window.showToast = function(msg){
-    try{
-      let el = document.querySelector('.em3-toast');
-      if(!el){
-        el = document.createElement('div');
-        el.className = 'em3-toast';
-        el.setAttribute('role','status');
-        el.setAttribute('aria-live','polite');
-        document.body.appendChild(el);
+  // Hook applyDesignForCurrentMode if it exists
+  const _applyDFC = window.applyDesignForCurrentMode;
+  if(typeof _applyDFC === 'function'){
+    window.applyDesignForCurrentMode = function(){
+      const r = _applyDFC.apply(this, arguments);
+      try{ window.applyTilePalette(); }catch(e){}
+      return r;
+    };
+  }
+  function ensureTileDialog(){
+    let dlg = document.getElementById('dlgTilePalette');
+    if(dlg) return dlg;
+    dlg = document.createElement('dialog');
+    dlg.id = 'dlgTilePalette';
+    dlg.innerHTML = [
+      '<h3>Kachel‑Farben (8×8)</h3>',
+      '<div class="grid-tiles" id="tilePaletteGrid"></div>',
+      '<footer>',
+        '<button class="btn" id="tilePaletteReset">Standard</button>',
+        '<button class="btn primary" id="tilePaletteSave">Speichern</button>',
+        '<button class="btn" id="tilePaletteClose">Schließen</button>',
+      '</footer>'
+    ].join('');
+    document.body.appendChild(dlg);
+    dlg.querySelector('#tilePaletteClose').addEventListener('click', ()=> dlg.close());
+    return dlg;
+  }
+  window.openTilePaletteEditor = function(modeKey){
+    const mk = keyFor(modeKey);
+    if(mk === 'ultra' || (mk !== 'low' && mk !== 'mid' && mk !== 'high')) return;
+    const dlg = ensureTileDialog();
+    const grid = dlg.querySelector('#tilePaletteGrid');
+    grid.innerHTML = '';
+    const arr = getTilePalette(mk) || Array(64).fill('');
+    for(let i=0;i<64;i++){
+      const inp = document.createElement('input');
+      inp.type = 'color';
+      let v = arr[i];
+      if(!v){
+        try{
+          const el = window.tileEls && tileEls[i];
+          if(el){
+            const cs = getComputedStyle(el).backgroundColor;
+            if(cs && cs.startsWith('rgb')){
+              const m = cs.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+              if(m){
+                const r = (+m[1]).toString(16).padStart(2,'0');
+                const g = (+m[2]).toString(16).padStart(2,'0');
+                const b = (+m[3]).toString(16).padStart(2,'0');
+                v = '#' + r + g + b;
+              }
+            }
+          }
+        }catch(e){}
       }
-      el.textContent = msg;
-      el.classList.add('show');
-      clearTimeout(el._t);
-      el._t = setTimeout(()=>{ el.classList.remove('show'); }, 1200);
-    }catch(e){}
+      inp.value = v || '#000000';
+      inp.dataset.idx = i;
+      grid.appendChild(inp);
+    }
+    const btnReset = dlg.querySelector('#tilePaletteReset');
+    const btnSave = dlg.querySelector('#tilePaletteSave');
+    btnReset.onclick = function(){
+      clearTilePalette(mk);
+      try{ window.applyTilePalette(mk); }catch(e){}
+      if(window.showToast) showToast('Kachel‑Farben zurückgesetzt');
+      dlg.close();
+    };
+    btnSave.onclick = function(){
+      const picks = Array.from(grid.querySelectorAll('input[type="color"]'));
+      const out = new Array(64).fill('');
+      picks.forEach(inp => {
+        const i = +inp.dataset.idx;
+        out[i] = inp.value || '';
+      });
+      saveTilePalette(mk, out);
+      try{ window.applyTilePalette(mk); }catch(e){}
+      if(window.showToast) showToast('Kachel‑Farben gespeichert');
+      dlg.close();
+    };
+    if(dlg.showModal) dlg.showModal();
   };
+  // Try to place a "Kacheln färben" button near common anchors if they exist
+  document.addEventListener('DOMContentLoaded', function(){
+    const addBtn = (afterId, mk) => {
+      const anchor = document.getElementById(afterId);
+      if(!anchor) return;
+      const btn = document.createElement('button');
+      btn.className = 'btn xsmall';
+      btn.textContent = 'Kacheln färben';
+      btn.style.marginLeft = '8px';
+      btn.addEventListener('click', (e)=>{ e.preventDefault(); openTilePaletteEditor(mk); });
+      anchor.insertAdjacentElement('afterend', btn);
+    };
+    ['resetLow','resetMid','resetHigh'].forEach((id,idx)=> addBtn(id, idx===0?'low':idx===1?'mid':'high'));
+  });
 })();
+</script>
 
+<script>
+// Re-apply tile palette whenever the board re-renders tiles (safe; style-only).
+(function(){
+  function getModeKey(){
+    const dm = (document.body.getAttribute('data-mode')||'').toLowerCase();
+    if(dm==='niedrig' || dm==='low') return 'low';
+    if(dm==='mittel' || dm==='medium' || dm==='mid') return 'mid';
+    if(dm==='hoch' || dm==='high') return 'high';
+    return dm;
+  }
+  function getPaletteFor(mk){
+    try{
+      const key = mk==='low' ? 'design_low_tiles' : mk==='mid' ? 'design_mid_tiles' : mk==='high' ? 'design_high_tiles' : null;
+      if(!key) return null;
+      const raw = localStorage.getItem(key);
+      if(!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.slice(0,64) : null;
+    }catch(_){ return null; }
+  }
+  function applyToEls(els, arr){
+    for(let i=0;i<els.length && i<64;i++){
+      const el = els[i];
+      if(!el || !el.style) continue;
+      const c = arr && arr[i] || null;
+      if(c){
+        el.style.backgroundColor = c;
+        try{ el.style.setProperty('background', 'linear-gradient(0deg,'+c+','+c+')', 'important'); }
+        catch(_){ el.style.background = c; }
+      }else{
+        el.style.backgroundColor = '';
+        try{ el.style.setProperty('background', '', 'important'); }catch(_){ el.style.background = ''; }
+      }
+    }
+  }
+  function repaint(){
+    const mk = getModeKey();
+    if(mk==='ultra') return; // Ultra unchanged
+    const arr = getPaletteFor(mk);
+    const board = document.getElementById('board');
+    if(!board) return;
+    // Prefer global tileEls if available and length matches
+    const els = (window.tileEls && tileEls.length===64) ? tileEls : Array.from(board.querySelectorAll('.tile'));
+    if(!els || !els.length) return;
+    applyToEls(els, arr);
+  }
+  // Initial and on DOMContentLoaded
+  try{ repaint(); }catch(_){}
+  document.addEventListener('DOMContentLoaded', function(){ try{ repaint(); }catch(_){} });
+  // Mutation observer for child changes
+  const board = document.getElementById('board');
+  if(board && window.MutationObserver){
+    const mo = new MutationObserver(()=>{ try{ repaint(); }catch(_){} });
+    mo.observe(board, { childList: true });
+  }
+  // Also repaint on window resize (some UIs rebuild tiles on resize)
+  window.addEventListener('resize', function(){ try{ repaint(); }catch(_){} }, { passive: true });
+})();
 </script>
 </body>
 </html>
