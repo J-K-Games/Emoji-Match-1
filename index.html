@@ -194,6 +194,26 @@ body.modal-open { overscroll-behavior-y: none; }
   /* Quests progress bar */
   .qprog{ width:100%; height:10px; border-radius:999px; background:#1d1334; overflow:hidden; border:1px solid #3a2c63; }
   .qprog > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg, #7c5cff, #00d1ff); }
+
+/* Toast for save feedback */
+#toastSave{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10000;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(40, 210, 120, 0.9);
+  color: #0b1b12;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+}
+#toastSave.show{ opacity: 1; transform: translateY(0); }
+#toastSave.error{ background: rgba(255, 90, 90, 0.92); color: #2a0b0b; }
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
 /* ==== Mobile refinement v5 ==== */
@@ -334,7 +354,8 @@ body.modal-open { overscroll-behavior-y: none; }
       <button id="btnTop" class="btn primary small">Bestenliste</button>
       <button id="btnRestart" class="btn warn small">Neustart</button>
     </div>
-  </header>
+    <button id="btnSave" class="btn small" title="Jetzt speichern">Speichern</button>
+</header>
 
   <main>
     <canvas id="bgCanvas" width="1280" height="720" aria-hidden="true"></canvas>
@@ -707,9 +728,8 @@ function baseQuestSet(){
 function loadQuests(){
   let s=null; try{ s=JSON.parse(localStorage.getItem(QUESTS_KEY)||"null"); }catch{}
   if(!s || s.date !== todayKey()){ s = { date: todayKey(), quests: baseQuestSet(), buffs: {} }; }
-  // normalize buffs
   s.buffs = s.buffs || {};
-  if(typeof s.buffs.scoreUntil !== "number") s.buffs.scoreUntil = 0; // timestamp ms
+  if(typeof s.buffs.scoreUntil !== "number") s.buffs.scoreUntil = 0;
   if(typeof s.buffs.scoreMult !== "number") s.buffs.scoreMult = 1;
   if(typeof s.buffs.moneyUntil !== "number") s.buffs.moneyUntil = 0;
   if(typeof s.buffs.moneyPerTile !== "number") s.buffs.moneyPerTile = 0;
@@ -732,13 +752,13 @@ function applyReward(rw){
   if(rw.kind === "buffScore"){
     questsState.buffs.scoreMult = rw.mult||2;
     questsState.buffs.scoreUntil = Date.now() + (rw.minutes||3)*60*1000;
-    showToast(`⚡ Doppelte Punkte für ${rw.minutes||3} Min aktiv!`);
+    try{ showToast(`⚡ Doppelte Punkte für ${rw.minutes||3} Min aktiv!`); }catch{}
   } else if(rw.kind === "buffMoneyPerTile"){
     questsState.buffs.moneyPerTile = rw.amount||5;
     questsState.buffs.moneyUntil = Date.now() + (rw.minutes||5)*60*1000;
-    showToast(`💸 +${rw.amount||5}€ pro Feld für ${rw.minutes||5} Min!`);
+    try{ showToast(`💸 +${rw.amount||5}€ pro Feld für ${rw.minutes||5} Min!`); }catch{}
   } else if(rw.kind === "instantMoney"){
-    const add = rw.amount||5000; points += add; updatePoints(); showToast(`+${add}€ Kontoguthaben`);
+    const add = rw.amount||5000; points += add; updatePoints(); try{ showToast(`+${add}€ Kontoguthaben`); }catch{}
   }
   saveQuests();
   renderQuests();
@@ -782,7 +802,6 @@ function renderQuests(){
     };
     list.appendChild(row);
   }
-  // Active buffs summary
   const ab = document.getElementById('questsActiveBuffs');
   function fmt(ms){ const s=Math.max(0, Math.ceil(ms/1000)); const m=Math.floor(s/60), ss=s%60; return `${m}:${String(ss).padStart(2,'0')}`; }
   const now = Date.now();
@@ -792,23 +811,15 @@ function renderQuests(){
   ab.textContent = lines.length ? lines.join(" · ") : "Keine aktiven Boni.";
 }
 setInterval(()=>{
-  // keep buffs live, auto-expire UI
   if(Date.now() > questsState.buffs.scoreUntil && questsState.buffs.scoreMult !== 1){ questsState.buffs.scoreMult = 1; saveQuests(); }
   if(Date.now() > questsState.buffs.moneyUntil && questsState.buffs.moneyPerTile !== 0){ questsState.buffs.moneyPerTile = 0; saveQuests(); }
 }, 2000);
 
-// Open quests
 document.addEventListener('click', (e)=>{
   if(e.target && e.target.id === 'btnQuests'){ const dlg=document.getElementById('dlgQuests'); if(dlg){ renderQuests(); dlg.showModal(); } }
 });
 
-
 /* ---------- Game ---------- */
-
-async function resolveLoop(){
-  while(await resolveMatches()){}
-}
-
 /* ---------- Ultra Swipe Animation Helpers ---------- */
 function __getStepPx(){
   const rs = getComputedStyle(document.documentElement);
@@ -867,7 +878,7 @@ function handleScoreMilestones(prev, curr){
 const DEFAULT_EMOJIS = ["🐶","🐱","🐷","🐹","🐰","🦊","🐻","🐼"];
 let customEmojis=[...DEFAULT_EMOJIS];
 let ownedEmojis=[];
-let grid=[], tileEls=[], score=0, bestScore=0, points=0, threeLines=0;
+let grid=[], tileEls=[], score=0, bestScore=0, points=0, threeLines=0; questOnScoreChanged(score);
 let counts={refresh:1, rocket:0, bomb:0, destroy:0};
 let activePower=null;
 
@@ -955,14 +966,17 @@ async function resolveMatches(){
   threeLines += threeNow; while(threeLines>=15){ counts.destroy++; points+=100; threeLines-=15; }
   updateCounts(); updatePoints();
 
-  const gained = toClear.size*10; const _prevScore1 = score; score += gained; scoreEl.textContent = "Score: " + score; handleScoreMilestones(_prevScore1, score);
+  const gained = toClear.size * getScorePerTile(); const _prevScore1 = score; score += gained; questOnScoreChanged(score); const moneyGain = toClear.size * getMoneyPerTile(); if(moneyGain>0){ points += moneyGain; updatePoints(); } questOnScoreChanged(score); scoreEl.textContent = "Score: " + score; handleScoreMilestones(_prevScore1, score);
   if(score>bestScore){ bestScore=score; const ab=document.getElementById('accBest'); if(ab) ab.textContent=bestScore; saveBest(); }
   if(perfMode!=="low"){ const first = toClear.values().next().value; if(first!=null) showPointsAt(first, gained); }
   toClear.forEach(i=> tileEls[i].classList.add('matching'));
   await sleep( perfMode==="low" ? 0 : 280 );
   toClear.forEach(i=> grid[i]=null);
   collapseAndFill();
-  await resolveLoop(); }
+  await resolveMatches();
+  try{ saveGameCloud(true); }catch(_){ }
+
+}
 
 /* input / gestures — unified Pointer Events with debounce */
 let touchStartIndex=null, swipeBusy=false;
@@ -994,11 +1008,11 @@ async function handleSwipe(i,dx,dy){
         counts.refresh --; updateCounts();
         shuffleBoard();
       }
-      activePower=null; return;
+      setActivePower(null); return;
     }
-    if(activePower==='rocket'){ const orient=Math.abs(dx)>Math.abs(dy)?'h':'v'; await useRocket(i,orient); activePower=null; return; }
-    if(activePower==='bomb'){ await useBomb(i); activePower=null; return; }
-    if(activePower==='destroy'){ await useDestroy(grid[i]); activePower=null; return; }
+    if(activePower==='rocket'){ const orient=Math.abs(dx)>Math.abs(dy)?'h':'v'; await useRocket(i,orient); setActivePower(null); return; }
+    if(activePower==='bomb'){ await useBomb(i); setActivePower(null); return; }
+    if(activePower==='destroy'){ await useDestroy(grid[i]); setActivePower(null); return; }
   } else {
     const dir=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
     const [r,c]=rcFromIndex(i); let j=null;
@@ -1090,7 +1104,7 @@ updateCounts = function(){
 /* header/footer buttons */
 $("#btnInfo").onclick=()=> document.getElementById('dlgInfo').showModal();
 $("#btnAccount").onclick=()=> openAccount();
-$("#btnRestart").onclick=()=>{ if(confirm("Spiel wirklich neu starten?")){ initGrid(); score=0; scoreEl.textContent="Score: 0"; } };
+$("#btnRestart").onclick=()=>{ if(confirm("Spiel wirklich neu starten?")){ initGrid(); questOnScoreChanged(score); score=0; scoreEl.textContent="Score: 0"; } };
 $("#btnPerf").onclick=()=>{
   const next = {low:"mid",mid:"high",high:"ultra",ultra:"low"}[perfMode];
   if(next==="ultra"){
@@ -1100,8 +1114,24 @@ $("#btnPerf").onclick=()=>{
 };
 $("#btnTop").onclick=()=> openTop();
 
+
+/* ---------- Firebase Auth (for Leaderboard rules Variant 1) ---------- */
+let auth=null;
+try{
+  if(typeof fb !== "undefined" && typeof fb.getAuth === "function"){
+    auth = fb.getAuth();
+    try{
+      if(!auth.currentUser){
+        fb.onAuthStateChanged(auth, (u)=>{});
+        fb.signInAnonymously(auth).catch(()=>{});
+      }
+    }catch(e){}
+  }
+}catch(e){}
+
 /* ---------- Account / Shop / Customization ---------- */
 let user=null, selectedTrophy=null;
+  try{ saveGameCloud(true); }catch(_){ }
 const SHOP_EMOJIS = Array.from(new Set([
   ..."🍎🍊🍋🍌🍉🍇🍓🫐🍒🍑🥝🍍🥥🥑🌶️🥕🍠🥔🥦🥬🥒🧅🍄🌽🍞🥐🥨🧀🍖🍗🥩🥓🍔🍟🌭🍕🥪🌮🌯🥙🍜🍝🍣🍤🍱🥟🍰🧁🍪🍩🍫🍬🍭🍮🍯🍺🍻🍷🍸🍹🥤🧋☕🫖"
   + "⚽🏀🏈⚾🎾🏐🏉🎱🏓🏸🥅🥊🎮🕹️🎲🎯♟️🧩"
@@ -1135,7 +1165,11 @@ document.getElementById('btnLogin').onclick = async ()=>{
       user = {name}; points=data.points||0; bestScore=data.bestScore||0; selectedTrophy=data.selectedTrophy||null;
       ownedEmojis=data.ownedEmojis||[]; customEmojis=data.customEmojis||DEFAULT_EMOJIS.slice();
       setPerf(data.perfMode||perfMode);
-    } else {
+    
+      // Restore save if present
+      if(data.save){ restoreSave(data.save); }
+      else { try{ const ls = localStorage.getItem('__em_save_'+name); if(ls){ restoreSave(JSON.parse(ls)); } }catch(_){ } }
+} else {
       // Lokaler Fallback (offline)
       const users=localUsers(); if(!users[name]) return alert("Kein Konto (lokal) gefunden.");
       if(users[name].pass!==hash(pass)) return alert("Passwort falsch.");
@@ -1226,7 +1260,8 @@ function renderShop(filter=""){
     if(owned.has(em)){ btn.disabled=true; btn.textContent=em+" ✓"; } else { btn.title="10.000 Punkte"; }
     btn.onclick=async()=>{
       if(points < 10000) return alert("Nicht genug Punkte.");
-      ownedEmojis.push(em); points-=10000; updatePoints();
+      ownedEmojis.push
+  try{ saveGameCloud(true); }catch(_){ }(em); points-=10000; updatePoints();
       if(db&&user) await fb.setDoc(fb.doc(db,"users",user.name), {ownedEmojis, points}, {merge:true});
       else { const users=localUsers(); users[user.name].ownedEmojis=ownedEmojis; users[user.name].points=points; saveLocalUsers(users); }
       renderShop(filter);
@@ -1254,41 +1289,91 @@ function renderCustomize(){
 }
 
 /* ---------- Leaderboard ---------- */
+
 async function saveBest(){
   if(user && db){
     try{
-      await fb.setDoc(fb.doc(db,"leaderboard", user.name), { user:user.name, trophy: selectedTrophy || null, score: bestScore, updatedAt: fb.serverTimestamp() }, {merge:true});
-      await fb.setDoc(fb.doc(db,"users", user.name), {bestScore: bestScore}, {merge:true});
-    }catch(e){ console.log("saveBest error",e); }
-  } else if (user) {
-    const users=localUsers(); users[user.name].bestScore = bestScore; saveLocalUsers(users);
+      if(typeof auth !== "undefined" && auth && !auth.currentUser && typeof fb.signInAnonymously === "function"){
+        try{ await fb.signInAnonymously(auth); }catch(e){}
+      }
+      const uid = (auth && auth.currentUser) ? auth.currentUser.uid : null;
+      const ref = fb.doc(db,"leaderboard", user.name);
+      await fb.runTransaction(db, async (tx)=>{
+        const snap = await tx.get(ref);
+        if(!snap.exists()){
+          tx.set(ref, {
+            displayName: user.name,
+            bestScore: bestScore,
+            updatedAt: fb.serverTimestamp(),
+            ownerUid: uid || "anon"
+          });
+          return;
+        }
+        const cur = snap.data();
+        if(bestScore > (cur.bestScore || 0)){
+          tx.update(ref, {
+            bestScore: bestScore,
+            updatedAt: fb.serverTimestamp(),
+            ownerUid: (cur.ownerUid || uid || "anon"),
+            displayName: user.name
+          });
+        } else {
+          tx.update(ref, { updatedAt: fb.serverTimestamp(), displayName: user.name });
+        }
+      });
+    }catch(err){
+      console.warn("Leaderboard update failed:", err);
+    }
   }
 }
+
 async function openTop(){
   const dlg=document.getElementById('dlgTop'); dlg.showModal();
   const list=document.getElementById('topList'); list.innerHTML="";
   if(db){
-    const q = fb.query(fb.collection(db,"leaderboard"), fb.orderBy("score","desc"), fb.limit(10));
-    const topSnap = await fb.getDocs(q);
-    let rank=1, inTop=false;
-    topSnap.forEach(s=>{
-      const d=s.data(); const row=document.createElement('div'); row.className='row';
-      row.innerHTML = `<div><b>${rank}.</b> ${d.trophy||""} ${d.user}</div><div><b>${d.score}</b></div>`;
-      list.appendChild(row); if(user && d.user===user.name) inTop=true; rank++;
+    const q = fb.query(fb.collection(db,"leaderboard"), fb.orderBy("bestScore","desc"), fb.limit(10));
+    if(window.__topUnsub) { try{ window.__topUnsub(); }catch(e){} }
+    window.__topUnsub = fb.onSnapshot(q, (topSnap)=>{
+      list.innerHTML = "";
+      let rank=1, inTop=false;
+      topSnap.forEach(s=>{
+        const d=s.data();
+        const row=document.createElement('div'); row.className='row';
+        const name = d.displayName || s.id || "Player";
+        const val = d.bestScore || 0;
+        row.innerHTML = `<div><b>${rank}.</b> ${name}</div><div><b>${val}</b></div>`;
+        list.appendChild(row);
+        if(user && (name===user.name)) inTop=true;
+        rank++;
+      });
+      if(user && !inTop){
+        (async()=>{
+          try{
+            const q2 = fb.query(fb.collection(db,"leaderboard"), fb.where("bestScore", ">", bestScore));
+            const s2 = await fb.getDocs(q2);
+            const row=document.createElement('div'); row.className='row you';
+            row.innerHTML = `<div><b>${s2.size+1}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`;
+            list.appendChild(row);
+          }catch(e){ /* ignore */ }
+        })();
+      }
     });
-    if(user && !inTop){
-      const q2 = fb.query(fb.collection(db,"leaderboard"), fb.where("score", ">", bestScore));
-      const s2 = await fb.getDocs(q2);
+  } else {
+    const users=localUsers();
+    const arr=Object.entries(users).map(([name,d])=>({user:name,score:(d.bestScore||0)})).sort((a,b)=>b.score-a.score);
+    arr.slice(0,10).forEach((d,i)=>{
       const row=document.createElement('div'); row.className='row';
-      row.innerHTML = `<div><b>${s2.size+1}.</b> ${selectedTrophy||""} ${user.name}</div><div><b>${bestScore}</b></div>`;
+      row.innerHTML = `<div><b>${i+1}.</b> ${d.user}</div><div><b>${d.score}</b></div>`;
+      list.appendChild(row);
+    });
+    if(user){
+      const over = arr.filter(x=>x.score>bestScore).length;
+      const row=document.createElement('div'); row.className='row you';
+      row.innerHTML = `<div><b>${over+1}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`;
       list.appendChild(row);
     }
-  } else {
-    // local ranking
-    const users=localUsers(); const arr=Object.entries(users).map(([name,d])=>({user:name,score:d.bestScore||0})).sort((a,b)=>b.score-a.score);
-    arr.slice(0,10).forEach((d,idx)=>{ const row=document.createElement('div'); row.className='row'; row.innerHTML=`<div><b>${idx+1}.</b> ${d.user}</div><div><b>${d.score}</b></div>`; list.appendChild(row); });
-    if(user && !arr.slice(0,10).some(d=>d.user===user.name)){ const rank=arr.findIndex(d=>d.user===user.name)+1; const row=document.createElement('div'); row.className='row'; row.innerHTML=`<div><b>${rank}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`; list.appendChild(row); }
   }
+
 }
 
 /* ---------- Power-up effects ---------- */
@@ -1300,30 +1385,33 @@ async function useRocket(i,orient){
   if(orient==='h'){ for(let cc=0;cc<8;cc++){ const idx=indexRC(r,cc); tileEls[idx].classList.add('matching'); grid[idx]=null; cleared++; } }
   else{ for(let rr=0;rr<8;rr++){ const idx=indexRC(rr,c); tileEls[idx].classList.add('matching'); grid[idx]=null; cleared++; } }
   await sleep( perfMode==="low"||perfMode==="mid" ? 0 : 260 );
-  collapseAndFill(); const _prevScore2 = score; score += cleared*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore2, score);
+  collapseAndFill(); const _prevScore2 = score; questOnScoreChanged(score); score += cleared*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore2, score);
+  try{ saveGameCloud(true); }catch(_){ }
 
-  try{ await resolveLoop(); }catch{}
-  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
+  try{ setActivePower(null); }catch(_){ }
+
 }
 async function useBomb(i){
   if(counts.bomb<=0) return;
   counts.bomb--; updateCounts(); points+=100; updatePoints(); AudioSys.sfxBomb();
   const [r0,c0]=rcFromIndex(i); const tiles=[]; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const r=r0+dr,c=c0+dc; if(r>=0&&r<8&&c>=0&&c<8) tiles.push(indexRC(r,c)); }
   tiles.forEach(idx=> tileEls[idx].classList.add('matching')); await sleep(perfMode==="low"||perfMode==="mid"?0:260);
-  tiles.forEach(idx=> grid[idx]=null); collapseAndFill(); const _prevScore3 = score; score += tiles.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore3, score);
+  tiles.forEach(idx=> grid[idx]=null); questOnScoreChanged(score); collapseAndFill(); const _prevScore3 = score; score += tiles.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore3, score);
+  try{ saveGameCloud(true); }catch(_){ }
 
-  try{ await resolveLoop(); }catch{}
-  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
+  try{ setActivePower(null); }catch(_){ }
+
 }
 async function useDestroy(emoji){
   if(counts.destroy<=0) return;
   counts.destroy--; updateCounts(); points+=100; updatePoints();
   const idxs=grid.map((v,idx)=> v===emoji?idx:-1).filter(x=>x>=0); idxs.forEach(idx=> tileEls[idx].classList.add('matching'));
   await sleep(perfMode==="low"||perfMode==="mid"?0:260);
-  idxs.forEach(idx=> grid[idx]=null); collapseAndFill(); const _prevScore4 = score; score += idxs.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore4, score);
+  idxs.forEach(idx=> grid[idx]=null); questOnScoreChanged(score); collapseAndFill(); const _prevScore4 = score; score += idxs.length*10; scoreEl.textContent="Score: "+score; handleScoreMilestones(_prevScore4, score);
+  try{ saveGameCloud(true); }catch(_){ }
 
-  try{ await resolveLoop(); }catch{}
-  try{ if(typeof setActivePower==='function') setActivePower(null);}catch{}
+  try{ setActivePower(null); }catch(_){ }
+
 }
 
 
@@ -1377,7 +1465,7 @@ function renderAdminList(){
   stats.textContent = `${data.length} Spieler angezeigt`;
   if(!data.length){ list.innerHTML = '<div class="adm-empty">Keine Spieler gefunden.</div>'; return; }
   const rows = data.slice(0,500).map(d=>{
-    const name = d.id;
+    const name = d.id; questOnScoreChanged(score);
     const score = d.bestScore || 0;
     const pts = d.points || 0;
     const trophy = d.selectedTrophy || "";
@@ -1465,6 +1553,92 @@ document.getElementById('btnAdmLogin').onclick = ()=>{
     msg.textContent = "Falsches Passwort.";
   }
 };
+
+
+
+// ---- Cloud Save / Load ----
+function getSavePayload(){
+  try{
+    return {
+      grid: Array.isArray(grid) ? [...grid] : [],
+      score: typeof score==='number' ? score : 0,
+      points: typeof points==='number' ? points : 0,
+      counts: (counts && typeof counts==='object') ? {refresh:counts.refresh||0, rocket:counts.rocket||0, bomb:counts.bomb||0, destroy:counts.destroy||0} : {refresh:1,rocket:0,bomb:0,destroy:0},
+      selectedTrophy: selectedTrophy || null,
+      customEmojis: Array.isArray(customEmojis) ? [...customEmojis] : [],
+      ownedEmojis: Array.isArray(ownedEmojis) ? [...ownedEmojis] : [],
+      perfMode
+    };
+  }catch(e){ return {}; }
+}
+
+async function saveGameCloud(auto=true){
+  const payload = { save: getSavePayload() };
+  try{
+    if(db && user && user.name){
+      await fb.updateDoc( fb.doc(db,"users", user.name), payload );
+      if(!auto) console.log("Spielstand gespeichert.");
+    } else {
+      throw new Error("no-db-or-user");
+    }
+  }catch(e){
+    try{
+      localStorage.setItem("__em_save_"+(user && user.name ? user.name : "_local"), JSON.stringify(payload.save));
+      if(!auto) console.warn("Cloud-Save fehlgeschlagen – lokal gespeichert:", e && (e.message||e));
+    }catch(_) {}
+  }
+}
+
+function restoreSave(sv){
+  try{
+    if(!sv) return false;
+    if(Array.isArray(sv.grid) && sv.grid.length===64){ grid = [...sv.grid]; }
+    if(typeof sv.score==='number'){ score = sv.score; scoreEl.textContent = "Score: " + score; }
+    if(typeof sv.points==='number'){ points = sv.points; updatePoints(); }
+    if(sv.counts){ counts = { refresh:sv.counts.refresh||0, rocket:sv.counts.rocket||0, bomb:sv.counts.bomb||0, destroy:sv.counts.destroy||0 }; updateCounts(); }
+    if(Array.isArray(sv.customEmojis) && sv.customEmojis.length){ customEmojis = [...sv.customEmojis]; }
+    if(Array.isArray(sv.ownedEmojis)){ ownedEmojis = [...sv.ownedEmojis]; }
+    if(sv.perfMode){ setPerf(sv.perfMode); }
+    renderGrid();
+    return true;
+  }catch(e){ console.warn("Restore fehlgeschlagen:", e); return false; }
+}
+
+// Autosave alle 15s
+if(!window.__saveTimer){
+  window.__saveTimer = setInterval(()=>{ saveGameCloud(true); }, 15000);
+}
+// Save beim Tab-Schließen (unsichtbar, notfalls lokal)
+window.addEventListener('beforeunload', ()=>{ try{ /* noop */ }catch(_){ } });
+
+
+
+// Manual save button
+const _saveBtn = document.getElementById('btnSave');
+if(_saveBtn){ _saveBtn.onclick = ()=>{ saveGameCloud(false); }; }
+
+
+
+// Manual save button with feedback
+(function(){
+  const _saveBtn = document.getElementById('btnSave');
+  if(!_saveBtn) return;
+  _saveBtn.onclick = ()=>{
+    (async()=>{
+      try{
+        const old = _saveBtn.textContent;
+        _saveBtn.disabled = true;
+        _saveBtn.textContent = "Speichern…";
+        await saveGameCloud(false);
+        _saveBtn.textContent = "Gespeichert";
+        showToast("Gespeichert", true);
+        setTimeout(()=>{ try{ _saveBtn.textContent = old; _saveBtn.disabled=false; }catch(_){ } }, 700);
+      }catch(e){
+        try{ _saveBtn.disabled=false; showToast("Fehler beim Speichern", false); }catch(_){ }
+      }
+    })();
+  };
+})();
 
 /* ---------- Boot ---------- */
 computeTileSize();
@@ -1863,12 +2037,12 @@ document.addEventListener('DOMContentLoaded', function(){
   function findPerfBar(){
     const nodes = Array.from(document.querySelectorAll('*')).filter(el => {
       const t = (el.textContent || '').replace(/\s+/g,' ').trim();
-      return /Niedrig/i.test(t) && /Mittel/i.test(t) && /Hoch/i.test(t) && /Ultra/i.test(t);
+      return /Niedrig/i.test(t) && /Mittel/i.test(t) && /Hoch/i.test(t) && /Ultra/i.test(t); questOnScoreChanged(score);
     });
     let pick = null, score = 1e15;
     nodes.forEach(el => {
       const r = el.getBoundingClientRect();
-      const area = Math.max(1, r.width*r.height);
+      const area = Math.max(1, r.width*r.height); questOnScoreChanged(score);
       const s = area + el.children.length * 2000;
       if (s < score) { score = s; pick = el; }
     });
@@ -2805,5 +2979,7 @@ document.addEventListener('click', function(ev){
   window.addEventListener('resize', function(){ try{ repaint(); }catch(_){} }, { passive: true });
 })();
 </script>
+
+<div id="toastSave" role="status" aria-live="polite" aria-atomic="true">Gespeichert</div>
 </body>
 </html>
