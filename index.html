@@ -1293,15 +1293,18 @@ function renderCustomize(){
 async function saveBest(){
   if(user && db){
     try{
+      // ensure anonymous sign-in if not signed
       if(typeof auth !== "undefined" && auth && !auth.currentUser && typeof fb.signInAnonymously === "function"){
         try{ await fb.signInAnonymously(auth); }catch(e){}
       }
       const uid = (auth && auth.currentUser) ? auth.currentUser.uid : null;
-      const ref = fb.doc(db,"leaderboard", user.name);
+
+      // write /leaderboard/{name} transactionally
+      const lref = fb.doc(db,"leaderboard", user.name);
       await fb.runTransaction(db, async (tx)=>{
-        const snap = await tx.get(ref);
+        const snap = await tx.get(lref);
         if(!snap.exists()){
-          tx.set(ref, {
+          tx.set(lref, {
             displayName: user.name,
             bestScore: bestScore,
             updatedAt: fb.serverTimestamp(),
@@ -1311,16 +1314,21 @@ async function saveBest(){
         }
         const cur = snap.data();
         if(bestScore > (cur.bestScore || 0)){
-          tx.update(ref, {
-            bestScore: bestScore,
+          tx.update(lref, {
+            bestScore,
             updatedAt: fb.serverTimestamp(),
             ownerUid: (cur.ownerUid || uid || "anon"),
             displayName: user.name
           });
         } else {
-          tx.update(ref, { updatedAt: fb.serverTimestamp(), displayName: user.name });
+          tx.update(lref, { updatedAt: fb.serverTimestamp(), displayName: user.name });
         }
       });
+
+      // keep /users/{name}.bestScore in sync as fallback base
+      try{
+        await fb.setDoc(fb.doc(db,"users", user.name), { bestScore }, { merge:true });
+      }catch(e){ /* ignore */ }
     }catch(err){
       console.warn("Leaderboard update failed:", err);
     }
@@ -1333,7 +1341,7 @@ async function openTop(){
   if(db){
     const q = fb.query(fb.collection(db,"leaderboard"), fb.orderBy("bestScore","desc"), fb.limit(10));
     if(window.__topUnsub) { try{ window.__topUnsub(); }catch(e){} }
-    window.__topUnsub = fb.onSnapshot(q, (topSnap)=>{
+    window.__topUnsub = fb.onSnapshot(q, async (topSnap)=>{
       list.innerHTML = "";
       let rank=1, inTop=false;
       topSnap.forEach(s=>{
@@ -1343,22 +1351,45 @@ async function openTop(){
         const val = d.bestScore || 0;
         row.innerHTML = `<div><b>${rank}.</b> ${name}</div><div><b>${val}</b></div>`;
         list.appendChild(row);
-        if(user && (name===user.name)) inTop=true;
+        if(user && name===user.name) inTop=true;
         rank++;
       });
+
+      // Fallback to /users if leaderboard is thin
+      if(topSnap.size < 3){
+        try{
+          const uq = fb.query(fb.collection(db,"users"), fb.orderBy("bestScore","desc"), fb.limit(10));
+          const ures = await fb.getDocs(uq);
+          if(ures.size){
+            list.innerHTML = "";
+            let i=1;
+            ures.forEach(doc=>{
+              const d = doc.data();
+              const name = doc.id;
+              const val = d.bestScore || 0;
+              const row=document.createElement('div'); row.className='row';
+              row.innerHTML = `<div><b>${i}.</b> ${name}</div><div><b>${val}</b></div>`;
+              list.appendChild(row);
+              i++;
+            });
+            inTop = !!(user && Array.from(ures.docs).some(doc=> doc.id === user.name));
+          }
+        }catch(e){ /* ignore */ }
+      }
+
+      // If you're not in current Top-10, show your rank hint
       if(user && !inTop){
-        (async()=>{
-          try{
-            const q2 = fb.query(fb.collection(db,"leaderboard"), fb.where("bestScore", ">", bestScore));
-            const s2 = await fb.getDocs(q2);
-            const row=document.createElement('div'); row.className='row you';
-            row.innerHTML = `<div><b>${s2.size+1}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`;
-            list.appendChild(row);
-          }catch(e){ /* ignore */ }
-        })();
+        try{
+          const overQ = fb.query(fb.collection(db,"leaderboard"), fb.where("bestScore", ">", bestScore));
+          const overSnap = await fb.getDocs(overQ);
+          const row=document.createElement('div'); row.className='row you';
+          row.innerHTML = `<div><b>${overSnap.size+1}.</b> ${user.name}</div><div><b>${bestScore}</b></div>`;
+          list.appendChild(row);
+        }catch(e){ /* ignore */ }
       }
     });
   } else {
+    // Local fallback stays the same
     const users=localUsers();
     const arr=Object.entries(users).map(([name,d])=>({user:name,score:(d.bestScore||0)})).sort((a,b)=>b.score-a.score);
     arr.slice(0,10).forEach((d,i)=>{
@@ -1373,7 +1404,6 @@ async function openTop(){
       list.appendChild(row);
     }
   }
-
 }
 
 /* ---------- Power-up effects ---------- */
