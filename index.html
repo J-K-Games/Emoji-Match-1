@@ -214,6 +214,23 @@ body.modal-open { overscroll-behavior-y: none; }
 }
 #toastSave.show{ opacity: 1; transform: translateY(0); }
 #toastSave.error{ background: rgba(255, 90, 90, 0.92); color: #2a0b0b; }
+
+/* === Event Boss HUD (vertical right bar) === */
+#eventBossHUD{ position:absolute; z-index:5; pointer-events:none; }
+#eventBossHUD .boss-label{ text-align:center; font-weight:800; font-size:.9rem; color:#cfcbe6; margin-bottom:.25rem; text-shadow:0 2px 8px #0007; }
+#eventBossHUD .boss-bar{ position:relative; width:16px; border-radius:10px; border:1px solid #3a2c63; background: linear-gradient(180deg, rgba(124,92,255,0.1), rgba(0,209,255,0.08)); overflow:hidden; backdrop-filter: blur(2px); }
+#eventBossHUD .boss-hp{ position:absolute; left:0; bottom:0; width:100%; height:100%; background: linear-gradient(180deg, rgba(124,92,255,.85), rgba(0,209,255,.85)); box-shadow: 0 0 12px rgba(124,92,255,.45); transition: height .2s ease; }
+#eventBossHUD .boss-timer{ text-align:center; font-size:.8rem; color:#9f99bb; margin-top:.25rem; }
+#eventBossHUD .boss-val{ position:absolute; top:6px; left:50%; transform:translateX(-50%); writing-mode: vertical-rl; text-orientation: mixed; font-weight:800; font-size:.75rem; color:#e9e6ff; opacity:.9; pointer-events:none; user-select:none; }
+#eventBossHUD .boss-buffs{ margin-top:.25rem; display:flex; flex-direction:column; gap:.2rem; align-items:center; }
+#eventBossHUD .buff-chip{ font-size:.7rem; padding:.1rem .3rem; border-radius:8px; background:rgba(58,44,99,.65); border:1px solid #3a2c63; color:#ddd; white-space:nowrap; }
+
+/* Event dialog basic tabs */
+#dlgEvent .tabs{ display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.6rem; }
+#dlgEvent .tabs button{ border-radius:999px; }
+#dlgEvent .tab-pane{ display:none; }
+#dlgEvent .tab-pane.active{ display:block; }
+
 </style>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><style>
 /* ==== Mobile refinement v5 ==== */
@@ -508,6 +525,12 @@ body.modal-open { overscroll-behavior-y: none; }
       <div class="help">10k 🥉, 40k 🥈, 70k 🥇, 100k 🏅, 150k 🎖, 200k 🏆 – auswählbar für Bestenliste.</div>
       <div id="trophyList" class="list"></div>
 
+      
+      <div class="title" style="margin-top:.8rem;">Event</div>
+      <div class="list">
+        <div class="row"><div>🧪 Event</div><div><button id="btnEvent" class="btn small primary">Öffnen</button></div></div>
+      </div>
+
       <div class="title" style="margin-top:.8rem;">Shop</div>
       <div class="list">
         <div class="row"><div>🛒 Emoji-Shop</div><div><button id="btnShop" class="btn small primary">Öffnen</button></div></div>
@@ -516,6 +539,72 @@ body.modal-open { overscroll-behavior-y: none; }
     </div>
   </div>
 </dialog>
+
+
+<!-- Event -->
+<dialog id="dlgEvent">
+  <div class="modal-header">
+    <div style="font-weight:800;">Event</div>
+    <button class="btn small" onclick="document.getElementById('dlgEvent').close()">Schließen</button>
+  </div>
+  <div class="modal-body">
+    <div class="tabs">
+      <button id="evTabBoss" class="btn small primary">Event&nbsp;Boss</button>
+      <button id="evTabStats" class="btn small">Statistik</button>
+      <button id="evTabBag" class="btn small">Event&nbsp;Rucksack</button>
+      <button id="evTabDailies" class="btn small">Tagesziele</button>
+      <button id="evTabPowers" class="btn small">Powerups</button>
+    </div>
+
+    <div id="evPaneBoss" class="tab-pane active">
+      <div class="help">Greife den Boss mit deinen 3er+ Kombos an. Tippe auf <b>Angreifen</b>, dann siehst du rechts neben dem Spielfeld eine vertikale Boss‑Leiste.</div>
+      <div class="list" style="margin-top:.5rem;">
+        <div class="row"><div>Aktueller Boss</div><div><b id="evBossName">—</b></div></div>
+        <div class="row"><div>HP</div><div><b id="evBossHP">—</b></div></div>
+        <div class="row"><div>Endet in</div><div><b id="evBossETA">—</b></div></div>
+      </div>
+      <div style="margin-top:.6rem; text-align:center;">
+        <button id="btnEvAttack" class="btn primary">Angreifen</button>
+      </div>
+      <div class="list" style="margin-top:.4rem;">
+        <div class="row" style="justify-content:center;">
+          <button id="btnEvHudToggle" class="btn small">Bossbar ausblenden</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="evPaneStats" class="tab-pane">
+      <div class="list">
+        <div class="row"><div>Dein Level</div><div><b id="evMyLevel">1</b> (<span id="evMyXP">0</span> XP)</div></div>
+        <div class="row"><div>Dein Gesamtschaden</div><div><b id="evMyDMG">0</b></div></div>
+      </div>
+      <div class="title" style="margin-top:.8rem;">Topliste (live)</div>
+      <div id="evToplist" class="list"></div>
+      <div class="title" style="margin-top:.8rem;">Event-Ende Belohnung</div>
+      <div id="evPayout" class="list"></div>
+    </div>
+
+    <div id="evPaneBag" class="tab-pane">
+      <div id="evBag" class="list"></div>
+    </div>
+
+    <div id="evPaneDailies" class="tab-pane">
+      <div id="evDailies" class="list"></div>
+    </div>
+
+    <div id="evPanePowers" class="tab-pane">
+      <div class="list">
+        <div class="row"><div>🪙 Tokens</div><div><b id="evMyTokens">0</b></div></div>
+      </div>
+      <div class="title" style="margin-top:.6rem;">Slots</div>
+      <div id="evSlots" class="list"></div>
+      <div class="title" style="margin-top:.6rem;">Shop</div>
+      <div id="evShop" class="list"></div>
+    </div>
+
+  </div>
+</dialog>
+
 
 <!-- Shop -->
 <dialog id="dlgShop">
@@ -889,7 +978,7 @@ const cntRefresh = $("#cntRefresh");
 const cntRocket = $("#cntRocket");
 const cntBomb = $("#cntBomb");
 const cntDestroy = $("#cntDestroy");
-function randEmoji(){ return customEmojis[Math.floor(Math.random()*customEmojis.length)]; }
+function randEmoji(){ const pool=(Array.isArray(customEmojis)&&customEmojis.length?customEmojis:DEFAULT_EMOJIS); return pool[Math.floor(Math.random()*pool.length)]; }
 function initGrid(){
   grid = new Array(64).fill(null).map(()=>randEmoji());
   let guard=0; while(findMatches().length>0 && guard++<50){ grid = grid.map(()=>randEmoji()); }
@@ -899,6 +988,17 @@ function initGrid(){
 }
 
 function renderGrid(){
+function replaceEmojisOnBoard(mapping){
+  if(!mapping) return;
+  const pairs = Array.isArray(mapping) ? mapping : Object.entries(mapping);
+  if(!Array.isArray(grid) || !Array.isArray(tileEls)) return;
+  for(let i=0;i<64;i++){
+    const cur = grid[i];
+    for(const [from,to] of pairs){ if(cur===from){ grid[i]=to; break; } }
+  }
+  for(let i=0;i<64;i++){ if(tileEls[i]) tileEls[i].textContent = grid[i]; }
+}
+
   boardEl.innerHTML=""; tileEls=[];
   for(let i=0;i<64;i++){
     const el=document.createElement('div');
@@ -965,6 +1065,9 @@ async function resolveMatches(){
   }
   threeLines += threeNow; while(threeLines>=15){ counts.destroy++; points+=100; threeLines-=15; }
   updateCounts(); updatePoints();
+  /* EVENT_BOSS_HOOK */
+  try{ if(window.__EVENT_BOSS__){ window.__EVENT_BOSS__.onMove(matches, toClear.size); } }catch(e){ console.warn('EVENT_BOSS_HOOK failed', e); }
+
 
   const gained = toClear.size * getScorePerTile(); const _prevScore1 = score; score += gained; questOnScoreChanged(score); const moneyGain = toClear.size * getMoneyPerTile(); if(moneyGain>0){ points += moneyGain; updatePoints(); } questOnScoreChanged(score); scoreEl.textContent = "Score: " + score; handleScoreMilestones(_prevScore1, score);
   if(score>bestScore){ bestScore=score; const ab=document.getElementById('accBest'); if(ab) ab.textContent=bestScore; saveBest(); }
@@ -1168,7 +1271,13 @@ document.getElementById('btnLogin').onclick = async ()=>{
     
       // Restore save if present
       if(data.save){ restoreSave(data.save); }
-      else { try{ const ls = localStorage.getItem('__em_save_'+name); if(ls){ restoreSave(JSON.parse(ls)); } }catch(_){ } }
+      else { try{ const ls = localStorage.getItem('__em_save_'+name); if(ls){ restoreSave(JSON.parse(ls)); } 
+      // Sync doc fields after restore to avoid stale save overwriting purchases
+      points = (typeof data.points==='number') ? data.points : points; updatePoints();
+      ownedEmojis = Array.isArray(data.ownedEmojis) ? data.ownedEmojis : ownedEmojis;
+      customEmojis = Array.isArray(data.customEmojis) ? data.customEmojis : (customEmojis && customEmojis.length? customEmojis : DEFAULT_EMOJIS.slice());
+      initGrid();
+}catch(_){ } }
 } else {
       // Lokaler Fallback (offline)
       const users=localUsers(); if(!users[name]) return alert("Kein Konto (lokal) gefunden.");
@@ -1259,34 +1368,91 @@ function renderShop(filter=""){
     const btn=document.createElement('button'); btn.className="btn"; btn.style.fontSize="1.4rem"; btn.textContent=em;
     if(owned.has(em)){ btn.disabled=true; btn.textContent=em+" ✓"; } else { btn.title="10.000 Punkte"; }
     btn.onclick=async()=>{
+      // Sofort sperren & Häkchen setzen
+      if((ownedEmojis||[]).includes(em)){ btn.disabled=true; btn.textContent=em+" ✓"; return; }
       if(points < 10000) return alert("Nicht genug Punkte.");
-      ownedEmojis.push
-  try{ saveGameCloud(true); }catch(_){ }(em); points-=10000; updatePoints();
-      if(db&&user) await fb.setDoc(fb.doc(db,"users",user.name), {ownedEmojis, points}, {merge:true});
-      else { const users=localUsers(); users[user.name].ownedEmojis=ownedEmojis; users[user.name].points=points; saveLocalUsers(users); }
+      btn.disabled = true; btn.textContent = em+" ✓";
+      ownedEmojis = Array.isArray(ownedEmojis) ? ownedEmojis : [];
+      ownedEmojis.push(em);
+      points = (points|0) - 10000; updatePoints();
+      if(db&&user){
+        await fb.setDoc(fb.doc(db,"users",user.name), {ownedEmojis, points}, {merge:true});
+      } else {
+        const users=localUsers(); users[user.name].ownedEmojis = ownedEmojis; users[user.name].points = points; saveLocalUsers(users);
+      }
+      try{ saveGameCloud(true); }catch(_){ }
       renderShop(filter);
     };
     grid.appendChild(btn);
   });
 }
 document.getElementById('btnCustomize').onclick = ()=>{ document.getElementById('dlgCustom').showModal(); renderCustomize(); };
+
 function renderCustomize(){
   const box = document.getElementById('customGrid'); box.innerHTML="";
-  const pool = DEFAULT_EMOJIS.concat(ownedEmojis);
-  let sel = new Set(customEmojis);
+  const pool = Array.from(new Set(DEFAULT_EMOJIS.concat(ownedEmojis||[])));
+  const before = Array.isArray(customEmojis)&&customEmojis.length? customEmojis.slice() : DEFAULT_EMOJIS.slice();
+  let sel = new Set(before);
+  let pendingFrom = [];        // Reihenfolge der abgewählten
+  let sessionPairs = [];       // [from, to] in der Klickreihenfolge
+
   pool.forEach(em=>{
-    const btn=document.createElement('button'); btn.className="btn"; btn.style.fontSize="1.4rem"; btn.textContent=em; btn.classList.toggle('primary', sel.has(em));
-    btn.onclick=()=>{ if(sel.has(em)){ sel.delete(em); } else if(sel.size<8){ sel.add(em); } btn.classList.toggle('primary', sel.has(em)); };
+    const btn=document.createElement('button');
+    btn.className='btn small';
+    btn.textContent=em;
+    btn.classList.toggle('primary', sel.has(em));
+    btn.onclick=()=>{
+      if(sel.has(em)){
+        sel.delete(em);
+        btn.classList.remove('primary');
+        pendingFrom.push(em); // merken: dieses Emoji soll ersetzt werden
+      }else{
+        if(sel.size>=8) return;
+        sel.add(em);
+        btn.classList.add('primary');
+        if(pendingFrom.length){
+          const from = pendingFrom.shift();
+          sessionPairs.push([from, em]); // direktes Mapping
+        }
+      }
+    };
     box.appendChild(btn);
   });
+
   document.getElementById('btnSaveCustom').onclick = async ()=>{
     if(sel.size!==8) return alert("Bitte genau 8 Emojis auswählen.");
-    customEmojis = Array.from(sel);
+    const after = Array.from(sel);
+
+    // Fallback-Mapping für noch übrig gebliebene entfernte/neu hinzugefügte (wenn Klickfolge nicht 1:1 war)
+    const bSet = new Set(before), aSet = new Set(after);
+    const removed = before.filter(x=>!aSet.has(x));
+    const added   = after.filter(x=>!bSet.has(x));
+
+    // Entferne bereits gemappte aus removed/added
+    const usedFrom = new Set(sessionPairs.map(p=>p[0]));
+    const usedTo   = new Set(sessionPairs.map(p=>p[1]));
+    const remLeft  = removed.filter(x=>!usedFrom.has(x));
+    const addLeft  = added.filter(x=>!usedTo.has(x));
+    for(let i=0;i<Math.min(remLeft.length, addLeft.length); i++){
+      sessionPairs.push([remLeft[i], addLeft[i]]);
+    }
+
+    // Direkter Austausch auf dem Board
+    try{ replaceEmojisOnBoard(sessionPairs); }catch(e){ console.warn('replace failed', e); }
+
+    // Persist
+    customEmojis = after;
+    // Einmaliges Refresh/Shuffle des Boards, damit alles sauber ist
+    try{ if(typeof shuffleBoard==='function') shuffleBoard(); }catch(_){ }
+
     if(db&&user) await fb.setDoc(fb.doc(db,"users",user.name), {customEmojis}, {merge:true});
     else { const users=localUsers(); users[user.name].customEmojis=customEmojis; saveLocalUsers(users); }
-    document.getElementById('dlgCustom').close(); initGrid();
+    try{ saveGameCloud(true); }catch(_){}
+    document.getElementById('dlgCustom').close();
+    try{ showToast('Emoji ersetzt: '+sessionPairs.map(p=>p[0]+'→'+p[1]).join(', ')); }catch(_){ }
   };
 }
+
 
 /* ---------- Leaderboard ---------- */
 
@@ -1606,7 +1772,7 @@ async function saveGameCloud(auto=true){
   const payload = { save: getSavePayload() };
   try{
     if(db && user && user.name){
-      await fb.updateDoc( fb.doc(db,"users", user.name), payload );
+      await fb.setDoc( fb.doc(db,"users", user.name), { ...payload, points, ownedEmojis, customEmojis }, { merge:true } );
       if(!auto) console.log("Spielstand gespeichert.");
     } else {
       throw new Error("no-db-or-user");
@@ -3011,5 +3177,760 @@ document.addEventListener('click', function(ev){
 </script>
 
 <div id="toastSave" role="status" aria-live="polite" aria-atomic="true">Gespeichert</div>
+
+<script>
+/* ======================= EVENT BOSS SYSTEM ======================= */
+(function(){
+  const $ = (sel)=>document.querySelector(sel);
+  const $$ = (sel)=>Array.from(document.querySelectorAll(sel));
+
+  // --- DOM references
+  let boardEl = document.getElementById('board');
+  function boardRect(){ const b = boardEl.getBoundingClientRect(); return {top:b.top + window.scrollY, left:b.left + window.scrollX, width:b.width, height:b.height}; }
+
+  // --- HUD
+  const hud = document.createElement('div'); hud.id='eventBossHUD';
+  hud.innerHTML = '<div class="boss-label">BOSS</div><div class="boss-bar"><div class="boss-hp" style="height:0%"></div><div class="boss-val" id="evHudVal"></div></div><div class="boss-timer" id="evHudTimer"></div><div class="boss-buffs" id="evHudBuffs"></div>';
+  document.body.appendChild(hud);
+  function placeHUD(){
+    if(!boardEl) boardEl = document.getElementById('board');
+    if(!boardEl) return;
+    const r = boardRect(); const gap = 8;
+    hud.style.top = (r.top + 6) + 'px';
+    hud.style.left = (r.left + r.width + gap) + 'px';
+    const bar = hud.querySelector('.boss-bar'); bar.style.height = Math.max(80, r.height - 12) + 'px';
+  }
+  window.addEventListener('resize', placeHUD, {passive:true});
+  window.addEventListener('scroll', placeHUD, {passive:true});
+  const mo = new MutationObserver(placeHUD); if(boardEl) mo.observe(boardEl, {childList:true, subtree:false});
+
+  // --- Time window (Europe/Berlin): Fri 00:00 — Tue 23:59:59
+  function berlinNow(){ return new Date(); }
+  function eventWindow(){
+    const now = berlinNow();
+    const day = now.getDay();
+    const sinceFri = (day>=5) ? (day-5) : (day+2);
+    const start = new Date(now); start.setHours(0,0,0,0); start.setDate(start.getDate()-sinceFri);
+    const end = new Date(start); end.setDate(start.getDate()+4); end.setHours(23,59,59,999);
+    const active = now>=start && now<=end;
+    return {active,start,end};
+  }
+  function isoWeekKey(d){
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+    return date.getUTCFullYear() + "-W" + String(weekNo).padStart(2,'0');
+  }
+
+  // --- Level math
+  function levelFromXP(xp){
+    let lvl = 1, need = 1000;
+    while(lvl < 20 && xp >= need){ xp -= need; lvl += 1; need += 1000; }
+    return lvl;
+  }
+
+  // --- Powerups (permanent unlocks; activations are timed)
+  const POWERUPS_DEF = [
+    {key:'frenzy',   name:'Frenzy',      cost:1, type:'buff',   dur:60,  desc:'+100% Event‑XP und +25% DMG/Feld (60s).', xpMult:2.0, dmgMult:1.25},
+    {key:'ruthless', name:'Ruthless',    cost:3, type:'buff',   dur:45,  desc:'+5 DMG/Feld (45s).', dmgAdd:5},
+    {key:'chain',    name:'Chain‑Link',  cost:2, type:'buff',   dur:60,  desc:'Kaskaden zählen +1 Länge für XP (60s).', chainPlus:1},
+    {key:'shard',    name:'Shard‑Rocket',cost:2, type:'instant',dur:0,   desc:'Trifft sofort 8 Felder (direkter DMG).', instantTiles:8},
+    {key:'meteor',   name:'Meteor',      cost:3, type:'instant',dur:0,   desc:'+150 Roh‑DMG sofort.', instantDMG:150},
+    {key:'timewarp', name:'Time‑Warp',   cost:2, type:'team',   dur:0,   desc:'+5 Min Event‑Zeit (Team‑Buff, bis +30 Min/Woche).', warp:5}
+  ];
+
+  function ensureMeStruct(d){
+    if(!d) d={};
+    d.items = d.items || {};
+    if(typeof d.items.token!=='number') d.items.token = d.items.token|0;
+    d.tokens = d.items.token;
+    d.unlocks = d.unlocks || {};
+    d.equipped = d.equipped || [];
+    d.cooldowns = d.cooldowns || {};
+    d.effects = d.effects || {};
+    d.dailyClaims = d.dailyClaims || {};
+    return d;
+  }
+
+  // --- EventBoss core
+  const EventBoss = {
+    enabled: true,
+    state: { active:false, name:'—', maxHp:0, hp:0, start:null, end:null, weekKey:null },
+    me: { dmg:0, xp:0, lvl:1, items:{}, tokens:0, unlocks:{}, equipped:[], cooldowns:{}, effects:{}, lastDailyKey:null, dailyDmg:0, buffs:{}, dailyClaims:{} },
+    _hitQueue: {dmg:0, xp:0},
+    _subBoss: null, _subPlayers: null, _subMe:null,
+
+    isActive(){ return this.enabled && this.state.active; },
+    getDamagePerTile(){
+      const hasBuff = this.me.buffs && this.me.buffs.dmgUntil && Date.now() < this.me.buffs.dmgUntil;
+      return hasBuff ? 20 : 10;
+    },
+
+    queueHit(dmg,xp){
+      if(!this.isActive()) return;
+      if(dmg<=0 && xp<=0) return;
+      this._hitQueue.dmg += Math.max(0, Math.round(dmg));
+      this._hitQueue.xp  += Math.max(0, Math.round(xp));
+      this._flushSoon();
+    },
+    _flushTimer: null,
+    _flushSoon(){ if(this._flushTimer) return; this._flushTimer = setTimeout(()=>{ this._flushTimer=null; this.flushHits(); }, 250); },
+
+    async flushHits(){
+      const q = this._hitQueue; this._hitQueue = {dmg:0, xp:0};
+      if(!this.isActive()) return;
+      if(q.dmg<=0 && q.xp<=0) return;
+      try{
+        if(window.db && window.fb && typeof fb.runTransaction === 'function' && window.user){
+          const bossRef = fb.doc(db,"eventBoss","current");
+          const meRef   = fb.doc(db,"eventBoss","current","players", user.name);
+          await fb.runTransaction(db, async (tx)=>{
+            const b = await tx.get(bossRef); if(!b.exists()) return;
+            const bd = b.data();
+            let hp = Math.max(0, (bd.hp||0) - q.dmg);
+            tx.update(bossRef, { hp });
+            const p = await tx.get(meRef);
+            const prev = p.exists()? p.data() : {};
+            const xp = (prev.xp||0) + q.xp;
+            const lvl = levelFromXP(xp);
+            const dmgTotal = (prev.dmgTotal||0) + q.dmg;
+            const todayKey = new Date().toISOString().slice(0,10);
+            const dailyDmg = (prev.dailyKey===todayKey ? (prev.dailyDmg||0) : 0) + q.dmg;
+            tx.set(meRef, { username:user.name, xp, level:lvl, dmgTotal, dailyKey:todayKey, dailyDmg }, {merge:true});
+          });
+        } else {
+          this.state.hp = Math.max(0, this.state.hp - q.dmg);
+          this.me.dmg += q.dmg; this.me.xp += q.xp; this.me.lvl = levelFromXP(this.me.xp);
+          this.me.dailyDmg += q.dmg;
+          renderHUD(); renderMe();
+        }
+      }catch(e){ console.warn("EventBoss.flushHits failed", e); }
+    },
+
+    async useItem(key){
+      const items = this.me.items || {};
+      const count = items[key]|0; if(count<=0) return;
+      items[key] = count - 1;
+      if(key==="cash50k"){ window.points = (window.points||0) + 50000; if(typeof updatePoints==='function') updatePoints(); }
+      if(key==="xp1000"){ this.me.xp = (this.me.xp||0) + 1000; this.me.lvl = levelFromXP(this.me.xp); }
+      if(key==="dmgBuff"){ this.me.buffs.dmgUntil = Date.now() + 15*60*1000; }
+      try{
+        if(window.db && window.fb && window.user){
+          const meRef = fb.doc(db,"eventBoss","current","players", user.name);
+          await fb.setDoc(meRef, { items, xp:this.me.xp, level:this.me.lvl, buffs:this.me.buffs }, {merge:true});
+        }
+      }catch(e){}
+      renderMe(); renderBag();
+    },
+
+    async initOrAttach(){
+      placeHUD();
+      const tab = (n)=>{
+        $("#evPaneBoss").classList.toggle("active", n===0);
+        $("#evPaneStats").classList.toggle("active", n===1);
+        $("#evPaneBag").classList.toggle("active", n===2);
+        $("#evPaneDailies").classList.toggle("active", n===3);
+        $("#evPanePowers").classList.toggle("active", n===4);
+        $("#evTabBoss").classList.toggle("primary", n===0);
+        $("#evTabStats").classList.toggle("primary", n===1);
+        $("#evTabBag").classList.toggle("primary", n===2);
+        $("#evTabDailies").classList.toggle("primary", n===3);
+        $("#evTabPowers").classList.toggle("primary", n===4);
+      };
+      $("#evTabBoss").onclick=()=>tab(0);
+      $("#evTabStats").onclick=()=>tab(1);
+      $("#evTabBag").onclick=()=>tab(2);
+      $("#evTabDailies").onclick=()=>tab(3);
+      $("#evTabPowers").onclick=()=>tab(4);
+      $("#btnEvAttack").onclick=()=>{ document.getElementById('dlgEvent').close(); placeHUD(); };
+
+      // HUD toggle
+      function hudHidden(){ try{ return localStorage.getItem('__ev_hud_off')==='1'; }catch(_){ return false; } }
+      function setHudHidden(v){ try{ localStorage.setItem('__ev_hud_off', v?'1':'0'); }catch(_){ } renderHUD(); updateHudBtn(); }
+      function updateHudBtn(){ const b = document.getElementById('btnEvHudToggle'); if(!b) return; b.textContent = hudHidden() ? 'Bossbar einblenden' : 'Bossbar ausblenden'; }
+      const hudBtn = document.getElementById('btnEvHudToggle'); if(hudBtn){ hudBtn.onclick = ()=> setHudHidden(!hudHidden()); updateHudBtn(); }
+
+      // Open button
+      const btn = document.getElementById('btnEvent');
+      if(btn){ btn.onclick = ()=>{ document.getElementById('dlgEvent').showModal(); renderAll(); renderSlots(); renderShop(); }; }
+
+      if(window.db && window.fb){
+        const bossRef = fb.doc(db,"eventBoss","current");
+        // Ensure weekly boss
+        try{
+          const w = eventWindow();
+          const wk = isoWeekKey(w.start);
+          await fb.runTransaction(db, async (tx)=>{
+            const b = await tx.get(bossRef);
+            const now = Date.now();
+            let needInit = true, data = {};
+            if(b.exists()){ data=b.data(); if(data.endAt && now < data.endAt) needInit=false; }
+            if(needInit){
+              function seededRand(seed){ let x = Math.sin(seed)*10000; return x - Math.floor(x); }
+              const base = Math.floor(500000 + seededRand(parseInt(wk.replace(/\D/g,''))) * 500000);
+              const maxHp = Math.min(1000000, Math.max(500000, base));
+              const start = w.start.getTime(); const end = w.end.getTime();
+              tx.set(bossRef, { name: "Boss " + wk, maxHp, hp:maxHp, startAt:start, endAt:end, weekKey:wk, warpAdded:0, createdAt: fb.serverTimestamp() }, {merge:true});
+            }
+          });
+        }catch(e){ console.warn("Boss init failed", e); }
+
+        // Boss subscribe
+        this._subBoss && this._subBoss(); this._subBoss = fb.onSnapshot(bossRef, (snap)=>{
+          const d = snap.exists()? snap.data(): null;
+          const w = eventWindow();
+          const active = w.active && d && Date.now() <= (d.endAt||0) && (d.hp||0) > 0;
+          this.state = {
+            active,
+            name: (d && d.name) || "—",
+            maxHp: (d && d.maxHp)||0,
+            hp: (d && d.hp)||0,
+            start: (d && d.startAt)||w.start.getTime(),
+            end: (d && d.endAt)||w.end.getTime(),
+            weekKey: (d && d.weekKey)||isoWeekKey(w.start)
+          };
+          renderHUD(); renderBossPane(); tryShowPayout();
+        });
+
+        // Me subscribe
+        const meRef = ()=> window.user ? fb.doc(db,"eventBoss","current","players", user.name) : null;
+        const subMe = ()=>{
+          const r = meRef(); if(!r) return;
+          this._subMe && this._subMe();
+          this._subMe = fb.onSnapshot(r, (snap)=>{
+            let d = snap.exists()? snap.data(): {};
+            d = ensureMeStruct(d);
+            this.me.xp = d.xp||0; this.me.lvl = d.level||levelFromXP(this.me.xp);
+            this.me.dmg = d.dmgTotal||0;
+            this.me.items = d.items||{};
+            this.me.tokens = d.tokens||d.items.token||0;
+            this.me.unlocks = d.unlocks||{};
+            this.me.equipped = d.equipped||[];
+            this.me.cooldowns = d.cooldowns||{};
+            this.me.effects = d.effects||{};
+            this.me.dailyDmg = d.dailyDmg||0; this.me.lastDailyKey = d.dailyKey||null;
+            this.me.dailyClaims = d.dailyClaims||{};
+            renderMe(); renderBag(); renderDailies(); renderSlots(); renderShop();
+          });
+        };
+        subMe();
+
+        // Toplist live
+        const q = fb.query(fb.collection(db,"eventBoss","current","players"), fb.orderBy("dmgTotal","desc"), fb.limit(50));
+        this._subPlayers && this._subPlayers(); this._subPlayers = fb.onSnapshot(q, (qs)=>{
+          const list=[]; qs.forEach(doc=>{ const d=doc.data(); list.push({name:d.username||doc.id, dmg:d.dmgTotal||0}); });
+          renderTop(list); captureTop(list); tryShowPayout();
+        });
+      } else {
+        // Local fallback
+        const w = eventWindow();
+        if(w.active){
+          if(!this.state.maxHp){ this.state.maxHp = 750000; this.state.hp = 750000; this.state.name = "Boss " + isoWeekKey(w.start); this.state.start = w.start.getTime(); this.state.end = w.end.getTime(); this.state.active = true; }
+        } else { this.state.active=false; }
+        renderHUD(); renderBossPane(); renderMe(); renderTop([]); renderBag(); renderDailies(); renderSlots(); renderShop();
+      }
+      placeHUD();
+      setInterval(()=>{ placeHUD(); renderHUD(); renderShop(); tryShowPayout(); }, 15000);
+    }
+  };
+  window.EventBoss = EventBoss;
+
+  function fmtNum(n){ try{ return n.toLocaleString('de-DE'); }catch(_){ return String(n); } }
+  function renderHUD(){
+    const st = EventBoss.state;
+    const bar = hud.querySelector('.boss-hp');
+    const t = $('#evHudTimer');
+    if(!st || !st.maxHp || !st.active || (typeof localStorage!=='undefined' && localStorage.getItem('__ev_hud_off')==='1')){ hud.style.display='none'; bar.style.height='0%'; if(t) t.textContent=''; return; } hud.style.display='block';
+    const pct = Math.max(0, Math.min(1, st.hp / st.maxHp));
+    bar.style.height = Math.round(pct*100) + '%'; const v=document.getElementById('evHudVal'); if(v){ try{ v.textContent = (EventBoss.state.hp? EventBoss.state.hp.toLocaleString('de-DE'): ''); }catch(_){ v.textContent = String(EventBoss.state.hp||''); } }
+    if(st.end){ const ms = Math.max(0, st.end - Date.now()); const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000), s = Math.floor((ms%60000)/1000); if(t) t.textContent = (h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')); }
+    // buffs chips
+    const buffBox = document.getElementById('evHudBuffs'); if(buffBox){ 
+      buffBox.innerHTML=''; 
+      if(EventBoss.me && EventBoss.me.effects){ 
+        const now=Date.now(); 
+        Object.entries(EventBoss.me.effects).forEach(([k,t])=>{ 
+          if(t>now){ 
+            const sec=Math.ceil((t-now)/1000); 
+            const def=(typeof POWERUPS_DEF!=='undefined')? POWERUPS_DEF.find(d=>d.key===k):null;
+            const name = def? def.name : k;
+            const div=document.createElement('div'); div.className='buff-chip'; div.textContent=name+' '+sec+'s';
+            buffBox.appendChild(div);
+          } 
+        }); 
+      }
+    }
+  }
+  function renderBossPane(){
+    $('#evBossName').textContent = EventBoss.state.name || '—';
+    $('#evBossHP').textContent = (EventBoss.state.hp && EventBoss.state.maxHp) ? (fmtNum(EventBoss.state.hp) + " / " + fmtNum(EventBoss.state.maxHp)) : '—';
+    const ms = Math.max(0, (EventBoss.state.end||0) - Date.now());
+    const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000), s = Math.floor((ms%60000)/1000);
+    $('#evBossETA').textContent = h? (h+"h "+m+"m") : (m? (m+"m "+s+"s") : (s+"s"));
+  }
+  function renderMe(){
+    $('#evMyLevel').textContent = EventBoss.me.lvl||1;
+    $('#evMyXP').textContent = EventBoss.me.xp||0;
+    $('#evMyDMG').textContent = fmtNum(EventBoss.me.dmg||0);
+  }
+  function renderTop(list){
+    const cont = $('#evToplist'); if(!cont) return;
+    cont.innerHTML = '';
+    if(!list || !list.length){ cont.innerHTML = '<div class="row"><div>—</div><div>Keine Einträge</div></div>'; return; }
+    list.slice(0,50).forEach((it,i)=>{
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = '<div>#'+(i+1)+' '+(it.name||'—')+'</div><div><b>'+fmtNum(it.dmg||0)+'</b></div>';
+      cont.appendChild(row);
+    });
+  }
+  // payout helpers
+  let _lastTop = [];
+  function captureTop(list){ _lastTop = Array.isArray(list)? list.slice(): []; }
+  async function tryShowPayout(){
+    const box = document.getElementById('evPayout'); if(!box) return;
+    box.innerHTML='';
+    const st = EventBoss.state;
+    if(st && st.active) { box.innerHTML = '<div class="row"><div>—</div><div>Event läuft…</div></div>'; return; }
+    const wk = st && st.weekKey || null;
+    if(!wk){ box.innerHTML = '<div class="row"><div>—</div><div>Keine Daten</div></div>'; return; }
+    let already=false;
+    try{
+      if(window.db && window.fb && window.user){
+        const cRef = fb.doc(db,'eventBoss','current','claims', user.name);
+        const c = await fb.getDoc(cRef);
+        already = c.exists() && c.data() && c.data().weekKey===wk && c.data().claimed===true;
+      }
+    }catch(e){}
+    if(already){
+      box.innerHTML = '<div class="row"><div>✅</div><div>Belohnung schon abgeholt.</div></div>'; return;
+    }
+    const mine = (EventBoss.me && EventBoss.me.dmg) || 0;
+    let total = 0; _lastTop.forEach(x=> total += (x.dmg||0));
+    if(total<=0 || mine<=0){ box.innerHTML = '<div class="row"><div>—</div><div>Keine Teilnahme erkannt.</div></div>'; return; }
+    const share = Math.max(0, Math.min(1, mine/total));
+    const tokens = Math.max(1, Math.ceil(10*share));
+    const cash   = Math.round(2000000*share);
+    const xpFl   = Math.max(0, Math.floor(100*share));
+    const dmgFl  = Math.max(0, Math.floor(20*share));
+    const msg = 'Dein Anteil: '+(Math.round(share*1000)/10)+'% → '+tokens+'🪙, '+cash.toLocaleString('de-DE')+' Punkte, '+xpFl+'× XP‑Flasche, '+dmgFl+'× DMG‑Flasche';
+    const row = document.createElement('div'); row.className='row';
+    row.innerHTML = '<div>🎁</div><div>'+msg+' &nbsp; <button id="btnClaimEnd" class="btn small primary">Claim</button></div>';
+    box.appendChild(row);
+    const btn = document.getElementById('btnClaimEnd');
+    if(btn){ btn.onclick = async ()=>{
+      try{
+        EventBoss.me.items = EventBoss.me.items||{};
+        EventBoss.me.items['token'] = (EventBoss.me.items['token']|0) + tokens;
+        EventBoss.me.items['xp1000'] = (EventBoss.me.items['xp1000']|0) + xpFl;
+        EventBoss.me.items['dmgBuff'] = (EventBoss.me.items['dmgBuff']|0) + dmgFl;
+        EventBoss.me.tokens = EventBoss.me.items['token'];
+        if(typeof window.points === 'number'){ window.points += cash; if(typeof updatePoints==='function') updatePoints(); }
+        if(window.db && window.fb && window.user){
+          const cRef = fb.doc(db,'eventBoss','current','claims', user.name);
+          const meRef = fb.doc(db,'eventBoss','current','players', user.name);
+          const uRef = fb.doc(db,'users', user.name);
+          await fb.runTransaction(db, async (tx)=>{
+            tx.set(cRef, {weekKey: wk, claimed:true, at: fb.serverTimestamp(), tokens, cash, xpFl, dmgFl}, {merge:true});
+            tx.set(meRef, {items: EventBoss.me.items}, {merge:true});
+            const u = await tx.get(uRef); const up = u.exists()? (u.data().points||0) : 0;
+            tx.set(uRef, {points: up + cash}, {merge:true});
+          });
+        }
+        tryShowPayout(); renderBag(); renderShop();
+      }catch(e){ alert('Claim fehlgeschlagen: '+(e&&e.message||e)); }
+    };}
+  }
+
+  function renderBag(){
+    const el = $('#evBag'); if(!el) return;
+    const items = EventBoss.me.items || {};
+    const def = [
+      {key:'cash50k', label:'💶 50.000 €', action:'Einlösen'},
+      {key:'dmgBuff', label:'⚔️ DMG‑Flasche (+15min x2 DMG)', action:'Benutzen'},
+      {key:'xp1000', label:'🧪 XP‑Flasche (+1000 XP)', action:'Benutzen'},
+      {key:'token', label:'🪙 Boss‑Token', action:'Shop (Powerups) →'}
+    ];
+    el.innerHTML = '';
+    def.forEach(d=>{
+      const n = items[d.key]|0;
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = '<div>'+d.label+'</div><div><b>'+n+'</b> &nbsp; '+ (d.key!=='token' ? '<button class="btn small" data-key="'+d.key+'">'+d.action+'</button>' : '') + '</div>';
+      el.appendChild(row);
+    });
+    el.querySelectorAll('button[data-key]').forEach(b=>{ b.onclick = ()=> EventBoss.useItem(b.getAttribute('data-key')); });
+  }
+  function renderDailies(){
+    const el = $('#evDailies'); if(!el) return;
+    const today = new Date().toISOString().slice(0,10);
+    if(EventBoss.me.lastDailyKey !== today){ EventBoss.me.dailyDmg = 0; EventBoss.me.lastDailyKey = today; }
+    const dmg = EventBoss.me.dailyDmg||0;
+    const tiers = [
+      {min:1000, max:5000, reward:1, tokens:0, idx:1},
+      {min:5001, max:11000, reward:2, tokens:1, idx:2},
+      {min:11001, max:19000, reward:3, tokens:2, idx:3},
+      {min:19001, max:20000, reward:4, tokens:3, idx:4},
+    ];
+    const claims = (EventBoss.me.dailyClaims && EventBoss.me.dailyClaims[today]) || 0;
+    el.innerHTML = '';
+    tiers.forEach(t=>{
+      const ready = dmg>=t.min;
+      const claimed = claims>=t.idx;
+      let right = (claimed? '✅ Eingelöst' : (ready? '<button class="btn small" data-claim="'+t.idx+'">Einlösen</button>' : (Math.min(100, Math.floor(dmg/t.max*100))+'%')));
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = '<div>DMG '+t.min+'-'+t.max+'</div><div>' + right + ' &nbsp; <span class="chip">Belohnung: '+t.reward+'× XP‑Flasche, '+t.tokens+'🪙</span></div>';
+      el.appendChild(row);
+    });
+    el.querySelectorAll('button[data-claim]').forEach(b=>{
+      b.onclick = async ()=>{
+        const idx = Number(b.getAttribute('data-claim'));
+        const tier = tiers.find(x=>x.idx===idx); if(!tier) return;
+        if(dmg < tier.min) return;
+        const today = new Date().toISOString().slice(0,10);
+        EventBoss.me.items = EventBoss.me.items||{};
+        EventBoss.me.items['xp1000'] = (EventBoss.me.items['xp1000']|0) + tier.reward;
+        EventBoss.me.items['token'] = (EventBoss.me.items['token']|0) + tier.tokens;
+        EventBoss.me.tokens = EventBoss.me.items['token'];
+        EventBoss.me.dailyClaims = EventBoss.me.dailyClaims||{}; 
+        EventBoss.me.dailyClaims[today] = Math.max(EventBoss.me.dailyClaims[today]||0, idx);
+        try{
+          if(window.db && window.fb && window.user){
+            const meRef = fb.doc(db,'eventBoss','current','players', user.name);
+            await fb.setDoc(meRef, { items: EventBoss.me.items, dailyClaims: EventBoss.me.dailyClaims }, {merge:true});
+          }
+        }catch(e){}
+        renderBag(); renderDailies(); renderShop();
+      };
+    });
+  }
+
+  // --- Powerups UI ---
+  function playerTokens(){ return (EventBoss.me && (EventBoss.me.tokens|| (EventBoss.me.items&&EventBoss.me.items.token)))|0; }
+  function setPlayerTokens(n){ n = Math.max(0, n|0); if(EventBoss.me){ EventBoss.me.tokens = n; EventBoss.me.items = EventBoss.me.items||{}; EventBoss.me.items.token = n; } }
+  async function persistMe(patch){ try{ if(window.db && window.fb && window.user){ const meRef = fb.doc(db,'eventBoss','current','players', user.name); await fb.setDoc(meRef, patch, {merge:true}); } }catch(e){} }
+  function renderSlots(){
+    const el = document.getElementById('evSlots'); if(!el) return;
+    const eq = (EventBoss.me.equipped||[]).slice(0,3); while(eq.length<3) eq.push(null);
+    el.innerHTML='';
+    eq.forEach((k,i)=>{
+      const def = POWERUPS_DEF.find(d=>d.key===k);
+      const name = def ? def.name : '— leer —';
+      const ctrls = [];
+      if(def){
+        ctrls.push('<button class="btn small" data-act="activate" data-key="'+k+'" data-slot="'+i+'">Aktivieren</button>');
+        ctrls.push('<button class="btn small" data-act="unequip" data-slot="'+i+'">Entfernen</button>');
+      } else {
+        ctrls.push('<span class="chip">Frei</span>');
+      }
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = '<div>Slot '+(i+1)+'</div><div><b>'+name+'</b> &nbsp; '+ctrls.join(' ')+'</div>';
+      el.appendChild(row);
+    });
+    el.querySelectorAll('button[data-act=\"unequip\"]').forEach(b=>{
+      b.onclick = async ()=>{ const i=Number(b.getAttribute('data-slot')); EventBoss.me.equipped=(EventBoss.me.equipped||[]); EventBoss.me.equipped[i]=null; await persistMe({equipped:EventBoss.me.equipped}); renderSlots(); renderShop(); };
+    });
+    el.querySelectorAll('button[data-act=\"activate\"]').forEach(b=>{ b.onclick = ()=> activatePower(b.getAttribute('data-key')); });
+  }
+  function renderShop(){
+    const el = document.getElementById('evShop'); if(!el) return;
+    const tokens = playerTokens(); const tokEl = document.getElementById('evMyTokens'); if(tokEl) tokEl.textContent = tokens;
+    el.innerHTML='';
+    POWERUPS_DEF.forEach(def=>{
+      const unlocked = !!(EventBoss.me.unlocks && EventBoss.me.unlocks[def.key]);
+      const equipped = (EventBoss.me.equipped||[]).includes(def.key);
+      const cd = EventBoss.me.cooldowns && EventBoss.me.cooldowns[def.key] || 0;
+      const now = Date.now(); const cdLeft = Math.max(0, cd - now);
+      const eff = EventBoss.me.effects && EventBoss.me.effects[def.key] || 0; const effLeft = Math.max(0, eff - now);
+      let right='';
+      if(!unlocked){
+        right = (tokens>=def.cost) ? '<button class=\"btn small\" data-buy=\"'+def.key+'\">Kaufen ('+def.cost+'🪙)</button>' : '<span class=\"chip\">Kosten: '+def.cost+'🪙</span>';
+      }else if(!equipped){
+        right = '<button class=\"btn small\" data-equip=\"'+def.key+'\">Ausrüsten</button>';
+      }else{
+        if(def.type==='buff' && effLeft>0){ right = '<span class=\"chip\">Aktiv: '+Math.ceil(effLeft/1000)+'s</span>'; }
+        else if(cdLeft>0){ right = '<span class=\"chip\">CD: '+Math.ceil(cdLeft/1000)+'s</span>'; }
+        else { right = '<button class=\"btn small\" data-activate=\"'+def.key+'\">Aktivieren</button>'; }
+      }
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = '<div>'+def.name+'<div class=\"help\">'+def.desc+'</div></div><div>'+right+'</div>';
+      el.appendChild(row);
+    });
+    el.querySelectorAll('button[data-buy]').forEach(b=>{
+      b.onclick = async ()=>{
+        const key=b.getAttribute('data-buy'); const def=POWERUPS_DEF.find(d=>d.key===key); if(!def) return;
+        if(playerTokens()<def.cost) return alert('Nicht genug Tokens.');
+        setPlayerTokens(playerTokens()-def.cost);
+        EventBoss.me.unlocks = EventBoss.me.unlocks||{}; EventBoss.me.unlocks[key]=true;
+        await persistMe({ items: EventBoss.me.items, unlocks: EventBoss.me.unlocks });
+        renderShop();
+      };
+    });
+    el.querySelectorAll('button[data-equip]').forEach(b=>{
+      b.onclick = async ()=>{
+        const key=b.getAttribute('data-equip'); EventBoss.me.equipped = EventBoss.me.equipped||[];
+        if(EventBoss.me.equipped.length<3){ EventBoss.me.equipped.push(key); } else { EventBoss.me.equipped[2]=key; }
+        await persistMe({equipped: EventBoss.me.equipped}); renderSlots(); renderShop();
+      };
+    });
+    el.querySelectorAll('button[data-activate]').forEach(b=>{ b.onclick = ()=> activatePower(b.getAttribute('data-activate')); });
+  }
+  function canActivate(def){
+    if(!(EventBoss.me.equipped||[]).includes(def.key)) return false;
+    const now=Date.now(); const cd = (EventBoss.me.cooldowns&&EventBoss.me.cooldowns[def.key])||0; if(cd>now) return false;
+    if(def.type==='buff'){ const eff=(EventBoss.me.effects&&EventBoss.me.effects[def.key])||0; if(eff>now) return false; }
+    return true;
+  }
+  async function persistMePatch(p){ try{ if(window.db && window.fb && window.user){ const meRef=fb.doc(db,'eventBoss','current','players', user.name); await fb.setDoc(meRef, p, {merge:true}); } }catch(e){} }
+  async function activatePower(key){
+    const def = POWERUPS_DEF.find(d=>d.key===key); if(!def) return;
+    if(!canActivate(def)) return;
+    const now = Date.now(); EventBoss.me.cooldowns = EventBoss.me.cooldowns||{};
+    if(def.type==='buff'){
+      EventBoss.me.effects = EventBoss.me.effects||{};
+      EventBoss.me.effects[key] = now + (def.dur*1000);
+      EventBoss.me.cooldowns[key] = now + (def.dur*1000) + 60000;
+      await persistMePatch({effects: EventBoss.me.effects, cooldowns: EventBoss.me.cooldowns});
+    }else if(def.type==='instant'){
+      let dmg = 0; if(def.instantTiles){ dmg += def.instantTiles * EventBoss.getDamagePerTile(); } if(def.instantDMG){ dmg += def.instantDMG; }
+      if(dmg>0 && window.__EVENT_BOSS__) window.__EVENT_BOSS__.onMove([{len:3}], Math.max(1, Math.round(dmg / EventBoss.getDamagePerTile())));
+      EventBoss.me.cooldowns[key] = now + 30000; await persistMePatch({cooldowns: EventBoss.me.cooldowns});
+    }else if(def.type==='team'){
+      try{
+        if(window.db && window.fb){
+          const bossRef = fb.doc(db,'eventBoss','current');
+          await fb.runTransaction(db, async (tx)=>{
+            const b = await tx.get(bossRef); if(!b.exists()) return;
+            const d = b.data(); const cap = 30; const add = 5; // minutes
+            const added = d.warpAdded||0; if(added >= cap) return;
+            const newAdded = Math.min(cap, added + add);
+            const endAt = (d.endAt||Date.now()) + (add*60*1000);
+            tx.update(bossRef, { warpAdded: newAdded, endAt });
+          });
+        } else {
+          // local fallback: extend local end time
+          EventBoss.state.end = (EventBoss.state.end||Date.now()) + 5*60*1000;
+        }
+        EventBoss.me.cooldowns[key] = now + 60000;
+        await persistMePatch({cooldowns: EventBoss.me.cooldowns});
+      }catch(e){ console.warn('Time‑Warp fail', e); }
+    }
+    renderShop(); renderHUD();
+  }
+  function activeMods(){
+    const now=Date.now(); const eff=EventBoss.me.effects||{}; const mods={xpMult:1, dmgMult:1, dmgAdd:0, chainPlus:0};
+    POWERUPS_DEF.forEach(d=>{ const t=eff[d.key]||0; if(t>now){ if(d.xpMult) mods.xpMult*=d.xpMult; if(d.dmgMult) mods.dmgMult*=d.dmgMult; if(d.dmgAdd) mods.dmgAdd+=d.dmgAdd; if(d.chainPlus) mods.chainPlus+=d.chainPlus; } });
+    return mods;
+  }
+
+  placeHUD();
+  document.addEventListener('click', (e)=>{ if(e.target && e.target.id==='btnEvent'){ document.getElementById('dlgEvent').showModal(); renderAll(); renderSlots(); renderShop(); } }, {capture:true});
+  function renderAll(){ renderHUD(); renderBossPane(); renderMe(); renderBag(); renderDailies(); renderSlots(); renderShop(); }
+
+  // Public API for match system
+  window.__EVENT_BOSS__ = {
+    onMove(matches, toClearSize){
+      if(!EventBoss.isActive()) return;
+      if(!matches || !matches.length) return;
+      let xp=0;
+      const mods = activeMods();
+      for(const m of matches){
+        const L = m.len + (mods.chainPlus||0);
+        if(L>=6) xp += 500; else if(L===5) xp += 100; else if(L===4) xp += 30; else if(L===3) xp += 10;
+      }
+      xp = Math.round(xp * (mods.xpMult||1));
+      let dmgPer = EventBoss.getDamagePerTile();
+      dmgPer = Math.round((dmgPer + (mods.dmgAdd||0)) * (mods.dmgMult||1));
+      const dmg = toClearSize * dmgPer;
+      EventBoss.queueHit(dmg, xp);
+    }
+  };
+
+  setTimeout(()=>EventBoss.initOrAttach(), 50);
+})();
+</script>
+
+
+<script>
+// --- Cloud Save Enhancer (UI-neutral) ---
+(function(){
+  // no-op cloud state setter to stay UI-neutral
+  function setCloudState(_){}; try{ window.setCloudState = window.setCloudState || setCloudState; }catch(_){}
+
+  // Ensure auth is available; try reusing fb imports or lazy import
+  async function ensureAuth(){
+    try{
+      if(!window.fb){ return null; }
+      if(!window.app || !window.db){ return null; }
+      if(!fb.getAuth){
+        try {
+          const FB_APP_VER = (window.FB_APP_VER || '10.12.2');
+          const mod = await import(`https://www.gstatic.com/firebasejs/${FB_APP_VER}/firebase-auth.js`);
+          fb.getAuth = mod.getAuth; fb.signInAnonymously = mod.signInAnonymously; fb.onAuthStateChanged = mod.onAuthStateChanged;
+        }catch(e){ console.warn('auth import failed', e); }
+      }
+      const auth = window.auth || (fb.getAuth ? fb.getAuth(app) : null);
+      if(!auth) return null;
+      window.auth = auth;
+      if(!auth.currentUser && fb.signInAnonymously){
+        try{ await fb.signInAnonymously(auth); }catch(e){ console.warn('anon sign-in failed', e); }
+      }
+      return auth.currentUser || null;
+    }catch(e){ console.warn('ensureAuth error', e); return null; }
+  }
+
+  // Select Document ID: prefer user.name, else uid_*
+  function _getDocId(){
+    try{
+      if(window.user && user.name && String(user.name).trim()) return String(user.name).trim();
+      if(window.auth && window.auth.currentUser && window.auth.currentUser.uid) return 'uid_'+window.auth.currentUser.uid;
+    }catch(_){}
+    return null;
+  }
+
+  // Local backup helpers
+  function _lastKey(){ try{ return (localStorage.getItem('EM3_LAST_USER')||'_local'); }catch(_){ return '_local'; } }
+  function _saveLocal(docId, payload){
+    try{ const k='__em_save_'+(docId||_lastKey()); localStorage.setItem(k, JSON.stringify(payload)); }catch(_){}
+  }
+  function _restoreLocal(){
+    try{
+      const key = _lastKey();
+      const raw = localStorage.getItem('__em_save_'+key);
+      if(raw){
+        const sv = JSON.parse(raw);
+        if(typeof window.restoreSave === 'function'){ window.restoreSave(sv); if(typeof window.showToast==='function') showToast('Lokaler Spielstand geladen'); }
+      }
+    }catch(e){ console.warn('restore local failed', e); }
+  }
+
+  // Override saveGameCloud to prioritize Cloud and show clear toasts
+  const prevSave = window.saveGameCloud;
+  window.saveGameCloud = async function(auto=true){
+    try{
+      const payload = { save: (typeof getSavePayload==='function'? getSavePayload() : {}) };
+      let usedCloud = false;
+      // Try Cloud first
+      try{
+        const u = await ensureAuth();
+        const docId = _getDocId();
+        if(window.db && window.fb && docId){
+          await fb.setDoc( fb.doc(db,'users', docId), { ...payload, points, ownedEmojis, customEmojis, displayName:(user&&user.name)||null }, { merge:true } );
+          usedCloud = true;
+          try{ localStorage.setItem('EM3_LAST_USER', docId); }catch(_){}
+        }
+      }catch(e){ console.warn('cloud save failed', e); }
+      // Always keep local backup
+      try{ _saveLocal(_getDocId(), payload.save); }catch(_){}
+      if(!auto){
+        if(typeof window.showToast==='function'){ showToast(usedCloud ? 'Gespeichert (Cloud)' : 'Gespeichert (Lokal)'); }
+      }
+    }catch(e){
+      console.warn('saveGameCloud override error', e);
+      if(typeof prevSave==='function'){ return prevSave(auto); }
+    }
+  };
+
+  // Persist on tab close
+  window.addEventListener('beforeunload', ()=>{
+    try{
+      const docId = _getDocId() || _lastKey();
+      _saveLocal(docId, (typeof getSavePayload==='function'? getSavePayload() : {}));
+      localStorage.setItem('EM3_LAST_USER', docId);
+    }catch(_){}
+  });
+
+  // Auto-restore a moment after load (keine UI-Änderung)
+  window.addEventListener('load', ()=>{ setTimeout(_restoreLocal, 300); });
+
+})();
+</script>
+
+
+<!-- Boss Sync Fix: prevent HP resets, multi-user shared boss via Firestore -->
+<script>
+(function(){
+  // Compute Berlin event window and ISO week key
+  function berlinNow(){ return new Date(); }
+  function eventWindow(){
+    const now = berlinNow();
+    const day = now.getDay();
+    const sinceFri = (day>=5) ? (day-5) : (day+2);
+    const start = new Date(now); start.setHours(0,0,0,0); start.setDate(start.getDate()-sinceFri);
+    const end = new Date(start); end.setDate(start.getDate()+4); end.setHours(23,59,59,999);
+    return {start, end, active: (now>=start && now<=end)};
+  }
+  function isoWeekKey(d){
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return date.getUTCFullYear() + '-W' + String(weekNo).padStart(2,'0');
+  }
+  function seededRand(seed){ let x = Math.sin(seed)*10000; return x - Math.floor(x); }
+
+  async function repairBossDoc(){
+    try{
+      if(!window.db || !window.fb || !window.app) return;
+      const {start, end} = eventWindow();
+      const wk = isoWeekKey(start);
+      const bossRef = fb.doc(db, 'eventBoss', 'current');
+      // Try get doc
+      let snap = await fb.getDoc(bossRef);
+      if(snap.exists()){
+        const d = snap.data() || {};
+        const updates = {};
+        if(!('startAt' in d)) updates.startAt = start.getTime();
+        if(!('endAt'   in d)) updates.endAt   = end.getTime();
+        if(!('weekKey' in d)) updates.weekKey = wk;
+        if(!('name'    in d)) updates.name    = 'Boss ' + wk;
+        // DO NOT touch hp/maxHp if already exists → prevents resets
+        if(Object.keys(updates).length){
+          await fb.setDoc(bossRef, updates, {merge:true});
+        }
+      } else {
+        // New boss for this window
+        const seed = parseInt(wk.replace(/\D/g,'')) || Date.now();
+        const base = Math.floor(500000 + seededRand(seed)*500000);
+        const maxHp = Math.min(1000000, Math.max(500000, base));
+        await fb.setDoc(bossRef, {
+          name: 'Boss ' + wk,
+          weekKey: wk,
+          maxHp: maxHp,
+          hp: maxHp,
+          startAt: start.getTime(),
+          endAt:   end.getTime(),
+          createdAt: fb.serverTimestamp()
+        }, {merge:true});
+      }
+    }catch(e){ console.warn('repairBossDoc failed', e); }
+  }
+
+  // Public API to deal damage atomically across all users
+  window.hitBoss = async function(dmg){
+    try{
+      if(!window.db || !window.fb) return false;
+      const bossRef = fb.doc(db, 'eventBoss', 'current');
+      await fb.runTransaction(db, async (tx)=>{
+        const b = await tx.get(bossRef); if(!b.exists()) return;
+        const d = b.data();
+        const hp = Math.max(0, (d.hp||0) - Math.max(0, Math.round(dmg||0)));
+        tx.update(bossRef, { hp });
+      });
+      if(typeof window.showToast==='function'){ showToast('Boss getroffen!'); }
+      return true;
+    }catch(e){ console.warn('hitBoss failed', e); return false; }
+  };
+
+  // Wire the repair once Firebase is initialized
+  function tryRepair(){ if(window.db && window.fb){ repairBossDoc(); } else { setTimeout(tryRepair, 800); } }
+  tryRepair();
+
+  // Extra safety: repair again a bit later (race vs. older clients)
+  setTimeout(repairBossDoc, 5000);
+})();
+</script>
+
 </body>
 </html>
